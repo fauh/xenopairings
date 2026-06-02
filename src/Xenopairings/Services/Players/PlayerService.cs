@@ -38,11 +38,12 @@ public class PlayerService(
 
     public async Task<IReadOnlyList<Player>> ListByTournamentAsync(Guid tournamentId)
     {
+        // OrderBy on DateTimeOffset cannot be translated to SQL by EF Core's SQLite
+        // provider. Fetch unordered, then sort in memory.
         var players = await db.Players
             .Where(p => p.TournamentId == tournamentId)
-            .OrderBy(p => p.RegisteredAt.UtcTicks)
             .ToListAsync();
-        return [.. players];
+        return [.. players.OrderBy(p => p.RegisteredAt)];
     }
 
     public async Task DropAsync(Guid playerId)

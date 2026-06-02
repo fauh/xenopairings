@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /e/
+Disallow: /new
+Disallow: /recover
+Disallow: /events
+
+# Event pages, manage pages, and user data are not for public indexing.
+# The app is an internal coordination tool for Consid colleagues.

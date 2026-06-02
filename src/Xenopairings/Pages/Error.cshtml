@@ -1,0 +1,32 @@
+@page
+@model Xenopairings.Pages.ErrorModel
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Error — Xenopairings</title>
+    <link href="~/css/bootstrap/bootstrap.min.css" rel="stylesheet" />
+    <link href="~/css/site.css" rel="stylesheet" asp-append-version="true" />
+</head>
+
+<body>
+    <div class="page-content" style="max-width:640px; text-align:center; padding-top:4rem;">
+        <div style="font-size:3rem; margin-bottom:1rem;">⚠️</div>
+        <h1>Something went wrong</h1>
+        <p class="text-muted">An unexpected error occurred. Please try again or go back to the home page.</p>
+
+        @if (Model.ShowRequestId)
+        {
+            <p class="text-muted" style="font-size:0.85rem;">
+                <strong>Request ID:</strong> <code>@Model.RequestId</code>
+            </p>
+        }
+
+        <a href="/" class="btn btn-primary mt-3">Back to home</a>
+    </div>
+</body>
+
+</html>

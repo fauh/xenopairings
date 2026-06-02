@@ -1,0 +1,26 @@
+<nav class="app-topnav" aria-label="Main navigation">
+    <a class="navbar-brand" href="/">Xenopairings</a>
+
+    <div class="nav-actions">
+        <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
+        <NavLink class="nav-link" href="/new">New tournament</NavLink>
+        <button class="btn-theme-toggle" @onclick="ToggleTheme"
+                aria-label="@(_isDark ? "Switch to light mode" : "Switch to dark mode")"
+                aria-pressed="@_isDark"
+                title="@(_isDark ? "Switch to light mode" : "Switch to dark mode")">
+            <span aria-hidden="true">@(_isDark ? "☀️" : "🌙")</span>
+        </button>
+    </div>
+</nav>
+
+@code {
+    private bool _isDark;
+
+    private async Task ToggleTheme()
+    {
+        _isDark = !_isDark;
+        await JS.InvokeVoidAsync("document.documentElement.setAttribute", "data-theme", _isDark ? "dark" : "light");
+    }
+
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+}

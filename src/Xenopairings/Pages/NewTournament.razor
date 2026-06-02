@@ -1,0 +1,169 @@
+@page "/new"
+@using Xenopairings.Models
+@using Xenopairings.Services.Tournaments
+@inject ITournamentService TournamentService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>New tournament — Xenopairings</PageTitle>
+
+<h1>Create a tournament</h1>
+
+<EditForm Model="@model" OnValidSubmit="HandleSubmit" style="max-width:600px">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label class="form-label" for="title">Tournament title <span class="text-danger">*</span></label>
+        <InputText id="title" class="form-control" @bind-Value="model.Title" placeholder="e.g. GT Season 4" />
+        <ValidationMessage For="@(() => model.Title)" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="description">Description</label>
+        <InputTextArea id="description" class="form-control" @bind-Value="model.Description" rows="3"
+            placeholder="Optional details about the tournament" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="startsAt">Tournament date &amp; time <span class="text-danger">*</span></label>
+        <InputDate id="startsAt" class="form-control" Type="InputDateType.DateTimeLocal"
+            @bind-Value="model.StartsAt" />
+        <ValidationMessage For="@(() => model.StartsAt)" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="timezone">Your time zone</label>
+        <input id="timezone" class="form-control" type="text" value="@model.TimeZoneId" readonly
+            title="Detected from your browser" />
+        <div class="form-text">Detected from your browser.</div>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="numberOfRounds">Number of rounds <span class="text-danger">*</span></label>
+        <InputNumber id="numberOfRounds" class="form-control" @bind-Value="model.NumberOfRounds" min="1" max="9" />
+        <ValidationMessage For="@(() => model.NumberOfRounds)" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="maxPlayers">Max players <span class="text-danger">*</span></label>
+        <InputNumber id="maxPlayers" class="form-control" @bind-Value="model.MaxPlayers" min="2" />
+        <ValidationMessage For="@(() => model.MaxPlayers)" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="organizerName">Your name <span class="text-danger">*</span></label>
+        <InputText id="organizerName" class="form-control" @bind-Value="model.OrganizerName" />
+        <ValidationMessage For="@(() => model.OrganizerName)" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label" for="organizerEmail">Your email <span class="text-danger">*</span></label>
+        <InputText id="organizerEmail" class="form-control" @bind-Value="model.OrganizerEmail" type="email"
+            placeholder="The manage link will be emailed here" />
+        <ValidationMessage For="@(() => model.OrganizerEmail)" />
+    </div>
+
+    <div class="mb-3 form-check">
+        <InputCheckbox id="isPrivate" class="form-check-input" @bind-Value="model.IsPrivate" />
+        <label class="form-check-label" for="isPrivate">Private tournament (link-only)</label>
+        <div class="form-text">When ticked, this tournament won't appear in public lists.</div>
+    </div>
+
+    <div class="mb-3 form-check">
+        <InputCheckbox id="registrationOpen" class="form-check-input" @bind-Value="model.RegistrationOpen" />
+        <label class="form-check-label" for="registrationOpen">Registration open</label>
+        <div class="form-text">Uncheck to create the tournament without allowing sign-ups yet.</div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger" role="alert">@errorMessage</div>
+    }
+
+    <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+        @(isSubmitting ? "Creating…" : "Create tournament")
+    </button>
+</EditForm>
+
+@code {
+    private readonly FormModel model = new();
+    private string? errorMessage;
+    private bool isSubmitting;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var tz = await JS.InvokeAsync<string>("eval", "Intl.DateTimeFormat().resolvedOptions().timeZone");
+            if (!string.IsNullOrWhiteSpace(tz))
+                model.TimeZoneId = tz;
+        }
+        catch
+        {
+            // JS interop can fail during prerender — UTC fallback stays
+        }
+        StateHasChanged();
+    }
+
+    private async Task HandleSubmit()
+    {
+        isSubmitting = true;
+        errorMessage = null;
+        try
+        {
+            var tournament = await TournamentService.CreateAsync(new CreateTournamentRequest(
+                Title: model.Title,
+                Description: model.Description,
+                StartsAt: model.StartsAt,
+                TimeZoneId: model.TimeZoneId,
+                NumberOfRounds: model.NumberOfRounds,
+                MaxPlayers: model.MaxPlayers,
+                OrganizerName: model.OrganizerName,
+                OrganizerEmail: model.OrganizerEmail,
+                IsPrivate: model.IsPrivate,
+                RegistrationOpen: model.RegistrationOpen
+            ));
+            Nav.NavigateTo($"/created/{tournament.Id}");
+        }
+        catch
+        {
+            errorMessage = "Something went wrong creating the tournament. Please try again.";
+            isSubmitting = false;
+        }
+    }
+
+    private sealed class FormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Title is required.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string Title { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.MaxLength(2000)]
+        public string? Description { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Tournament date is required.")]
+        public DateTime StartsAt { get; set; } = DateTime.Today.AddDays(14).AddHours(9);
+
+        public string TimeZoneId { get; set; } = "UTC";
+
+        [System.ComponentModel.DataAnnotations.Range(1, 9, ErrorMessage = "Rounds must be between 1 and 9.")]
+        public int NumberOfRounds { get; set; } = 5;
+
+        [System.ComponentModel.DataAnnotations.Range(2, 256, ErrorMessage = "Max players must be at least 2.")]
+        public int MaxPlayers { get; set; } = 16;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Your name is required.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string OrganizerName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Your email is required.")]
+        [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Enter a valid email address.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string OrganizerEmail { get; set; } = string.Empty;
+
+        public bool IsPrivate { get; set; }
+        public bool RegistrationOpen { get; set; } = true;
+    }
+}

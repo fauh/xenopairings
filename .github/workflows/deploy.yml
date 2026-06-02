@@ -1,0 +1,36 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["Build & push image"]
+    types:
+      - completed
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Azure App Service
+    runs-on: ubuntu-latest
+    # Only run if the image-push workflow succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    permissions:
+      id-token: write   # required for OIDC login
+      contents: read
+
+    steps:
+      - name: Azure login (OIDC — no stored secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Restart App Service to pull new image
+        # Azure App Service pulls :latest from GHCR on restart.
+        # The image was already pushed by build-image.yml before this job runs.
+        run: |
+          az webapp restart \
+            --name "${{ secrets.AZURE_APP_NAME }}" \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}"

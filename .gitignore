@@ -1,0 +1,32 @@
+## .gitignore for .NET / ASP.NET Core
+
+# Build outputs
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# NuGet
+packages/
+*.nupkg
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# User secrets
+secrets.json
+
+# Publish output
+publish/
+
+# ASP.NET Core Data Protection keys (generated at runtime)
+dataprotection-keys/
+
+# OS
+.DS_Store
+Thumbs.db

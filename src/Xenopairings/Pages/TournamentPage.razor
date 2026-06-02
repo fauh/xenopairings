@@ -1,0 +1,192 @@
+@page "/t/{Slug}"
+@using Xenopairings.Models
+@using Xenopairings.Services.Tournaments
+@using Xenopairings.Services.Players
+@inject ITournamentService TournamentService
+@inject IPlayerService PlayerService
+@inject NavigationManager Nav
+
+<PageTitle>@(_tournament?.Title ?? "Tournament") — Xenopairings</PageTitle>
+
+@if (_loading)
+{
+    <LoadingSpinner />
+}
+else if (_tournament is null)
+{
+    <div class="empty-state">
+        <div class="empty-state-icon">🎲</div>
+        <h3>Tournament not found</h3>
+        <p>This tournament doesn't exist or may have been removed.</p>
+        <a href="/" class="btn btn-primary mt-3">Back to home</a>
+    </div>
+}
+else
+{
+    <h1>@_tournament.Title</h1>
+
+    @if (!string.IsNullOrWhiteSpace(_tournament.Description))
+    {
+        <p class="lead">@_tournament.Description</p>
+    }
+
+    <div class="mb-3 text-muted">
+        <small>
+            @_tournament.NumberOfRounds rounds ·
+            @_players.Count(p => !p.IsDropped) / @_tournament.MaxPlayers players
+            @if (!_tournament.RegistrationOpen)
+            {
+                <span> · Registration closed</span>
+            }
+        </small>
+    </div>
+
+    @* ── Registration ─────────────────────────────────────────────────────── *@
+    @if (_tournament.RegistrationOpen && !_tournament.IsClosed)
+    {
+        <div class="card mb-4" style="max-width:500px">
+            <div class="card-body">
+                <h2 class="h5 card-title">Register for this tournament</h2>
+
+                @if (_registrationSuccess)
+                {
+                    <div class="alert alert-success" role="alert">
+                        You're registered! An email with your edit link has been sent (if you provided an email).
+                    </div>
+                }
+                else
+                {
+                    <EditForm Model="@_regModel" OnValidSubmit="HandleRegister">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+
+                        <div class="mb-3">
+                            <label class="form-label" for="playerName">Name <span class="text-danger">*</span></label>
+                            <InputText id="playerName" class="form-control" @bind-Value="_regModel.Name" />
+                            <ValidationMessage For="@(() => _regModel.Name)" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="playerEmail">Email</label>
+                            <InputText id="playerEmail" class="form-control" @bind-Value="_regModel.Email" type="email"
+                                placeholder="Optional — for edit link" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="playerFaction">Army / Faction</label>
+                            <InputText id="playerFaction" class="form-control" @bind-Value="_regModel.ArmyFaction"
+                                placeholder="e.g. Space Marines" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="playerArmyList">Army list</label>
+                            <InputTextArea id="playerArmyList" class="form-control" @bind-Value="_regModel.ArmyList"
+                                rows="5" placeholder="Paste your army list here (optional)" />
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(_regError))
+                        {
+                            <div class="alert alert-danger" role="alert">@_regError</div>
+                        }
+
+                        <button type="submit" class="btn btn-primary" disabled="@_regSubmitting">
+                            @(_regSubmitting ? "Registering…" : "Register")
+                        </button>
+                    </EditForm>
+                }
+            </div>
+        </div>
+    }
+
+    @* ── Players ──────────────────────────────────────────────────────────── *@
+    <h2 class="h5 mt-4">Players (@_players.Count(p => !p.IsDropped))</h2>
+    @if (!_players.Any())
+    {
+        <p class="text-muted">No players registered yet.</p>
+    }
+    else
+    {
+        <div class="table-responsive mb-4">
+            <table class="table table-sm">
+                <thead>
+                    <tr><th>Name</th><th>Faction</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var player in _players.OrderBy(p => p.Name))
+                    {
+                        <tr>
+                            <td>@player.Name</td>
+                            <td>@(player.ArmyFaction ?? "—")</td>
+                            <td>@(player.IsDropped ? "Dropped" : "Active")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = string.Empty;
+
+    private Tournament? _tournament;
+    private List<Player> _players = [];
+    private bool _loading = true;
+
+    // Registration form
+    private readonly RegModel _regModel = new();
+    private string? _regError;
+    private bool _regSubmitting;
+    private bool _registrationSuccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tournament = await TournamentService.GetBySlugAsync(Slug);
+        if (_tournament is not null)
+            _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
+        _loading = false;
+    }
+
+    private async Task HandleRegister()
+    {
+        if (_tournament is null) return;
+        _regSubmitting = true;
+        _regError = null;
+        try
+        {
+            await PlayerService.RegisterAsync(new Services.Players.RegisterPlayerRequest(
+                TournamentId: _tournament.Id,
+                Name: _regModel.Name,
+                Email: _regModel.Email,
+                ArmyFaction: _regModel.ArmyFaction,
+                ArmyList: _regModel.ArmyList
+            ));
+            _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
+            _registrationSuccess = true;
+        }
+        catch
+        {
+            _regError = "Registration failed. Please try again.";
+        }
+        finally
+        {
+            _regSubmitting = false;
+        }
+    }
+
+    private sealed class RegModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Name is required.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string Name { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Enter a valid email address.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string? Email { get; set; }
+
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string? ArmyFaction { get; set; }
+
+        public string? ArmyList { get; set; }
+    }
+}

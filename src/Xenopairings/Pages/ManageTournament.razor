@@ -1,0 +1,128 @@
+@page "/t/{Slug}/manage"
+@using Xenopairings.Models
+@using Xenopairings.Services.Tournaments
+@using Xenopairings.Services.Players
+@inject ITournamentService TournamentService
+@inject IPlayerService PlayerService
+@inject NavigationManager Nav
+
+<PageTitle>Manage — Xenopairings</PageTitle>
+
+@if (_loading)
+{
+    <LoadingSpinner />
+}
+else if (_tournament is null)
+{
+    <div class="empty-state">
+        <div class="empty-state-icon">🔒</div>
+        <h3>Not found or access denied</h3>
+        <p>Check your manage link and try again.</p>
+        <a href="/" class="btn btn-primary mt-3">Back to home</a>
+    </div>
+}
+else
+{
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+        <h1>@_tournament.Title <small class="text-muted fs-6">— Manage</small></h1>
+        <a href="/t/@_tournament.Slug" class="btn btn-outline-secondary btn-sm">Public view</a>
+    </div>
+
+    @* ── Registration controls ─────────────────────────────────────────────── *@
+    <div class="card mb-4">
+        <div class="card-body">
+            <h2 class="h5 card-title">Registration</h2>
+            <p class="card-text text-muted">
+                Status: <strong>@(_tournament.RegistrationOpen ? "Open" : "Closed")</strong>
+            </p>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleRegistration" disabled="@_saving">
+                @(_tournament.RegistrationOpen ? "Close registration" : "Open registration")
+            </button>
+        </div>
+    </div>
+
+    @* ── Players ──────────────────────────────────────────────────────────── *@
+    <h2 class="h5">Players (@_players.Count)</h2>
+    @if (!_players.Any())
+    {
+        <p class="text-muted">No players yet.</p>
+    }
+    else
+    {
+        <div class="table-responsive mb-4">
+            <table class="table table-sm">
+                <thead>
+                    <tr><th>Name</th><th>Faction</th><th>Email</th><th>Status</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var player in _players.OrderBy(p => p.RegisteredAt))
+                    {
+                        <tr>
+                            <td>@player.Name</td>
+                            <td>@(player.ArmyFaction ?? "—")</td>
+                            <td>@(player.Email ?? "—")</td>
+                            <td>@(player.IsDropped ? "Dropped" : "Active")</td>
+                            <td>
+                                @if (!player.IsDropped)
+                                {
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            @onclick="() => DropPlayer(player.Id)"
+                                            disabled="@_saving">Drop</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(_statusMessage))
+    {
+        <div class="alert alert-info" role="alert">@_statusMessage</div>
+    }
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = string.Empty;
+    [SupplyParameterFromQuery(Name = "t")] public string? ManageToken { get; set; }
+
+    private Tournament? _tournament;
+    private List<Player> _players = [];
+    private bool _loading = true;
+    private bool _saving;
+    private string? _statusMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(ManageToken))
+            _tournament = await TournamentService.GetByManageTokenAsync(ManageToken);
+
+        // Verify slug matches to prevent token fishing across tournaments
+        if (_tournament is not null && _tournament.Slug != Slug)
+            _tournament = null;
+
+        if (_tournament is not null)
+            _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
+
+        _loading = false;
+    }
+
+    private async Task ToggleRegistration()
+    {
+        if (_tournament is null) return;
+        _saving = true;
+        _tournament.RegistrationOpen = !_tournament.RegistrationOpen;
+        // TODO: persist via service in Phase 1
+        _statusMessage = $"Registration is now {(_tournament.RegistrationOpen ? "open" : "closed")} (not yet persisted — Phase 1 task).";
+        _saving = false;
+    }
+
+    private async Task DropPlayer(Guid playerId)
+    {
+        _saving = true;
+        await PlayerService.DropAsync(playerId);
+        _players = [.. await PlayerService.ListByTournamentAsync(_tournament!.Id)];
+        _saving = false;
+    }
+}

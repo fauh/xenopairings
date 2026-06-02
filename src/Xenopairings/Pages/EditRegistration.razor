@@ -1,0 +1,88 @@
+@page "/t/{Slug}/edit-registration"
+@using Xenopairings.Models
+@using Xenopairings.Services.Players
+@inject IPlayerService PlayerService
+@inject NavigationManager Nav
+
+<PageTitle>Edit registration — Xenopairings</PageTitle>
+
+@if (_loading)
+{
+    <LoadingSpinner />
+}
+else if (_player is null)
+{
+    <div class="empty-state">
+        <div class="empty-state-icon">🔒</div>
+        <h3>Not found or access denied</h3>
+        <p>Check your edit link and try again.</p>
+        <a href="/" class="btn btn-primary mt-3">Back to home</a>
+    </div>
+}
+else if (_withdrawn)
+{
+    <h1>Registration withdrawn</h1>
+    <p class="text-muted">You have been removed from the tournament.</p>
+    <a href="/t/@Slug" class="btn btn-outline-primary">Back to tournament</a>
+}
+else
+{
+    <h1>Edit your registration</h1>
+    <p class="text-muted">Tournament: <a href="/t/@Slug">@Slug</a></p>
+
+    <div class="card mb-4" style="max-width:500px">
+        <div class="card-body">
+            <h2 class="h5 card-title">Your details</h2>
+            <dl class="mb-3">
+                <dt>Name</dt><dd>@_player.Name</dd>
+                <dt>Faction</dt><dd>@(_player.ArmyFaction ?? "—")</dd>
+                <dt>Email</dt><dd>@(_player.Email ?? "—")</dd>
+            </dl>
+
+            @if (!_withdrawConfirm)
+            {
+                <button class="btn btn-outline-danger btn-sm" @onclick="() => _withdrawConfirm = true">
+                    Withdraw from tournament
+                </button>
+            }
+            else
+            {
+                <p class="text-danger">Are you sure you want to withdraw?</p>
+                <button class="btn btn-danger btn-sm me-2" @onclick="WithdrawAsync" disabled="@_saving">
+                    @(_saving ? "Withdrawing…" : "Yes, withdraw")
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="() => _withdrawConfirm = false">
+                    Cancel
+                </button>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = string.Empty;
+    [SupplyParameterFromQuery(Name = "t")] public string? EditToken { get; set; }
+
+    private Player? _player;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _withdrawConfirm;
+    private bool _withdrawn;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(EditToken))
+            _player = await PlayerService.GetByEditTokenAsync(EditToken);
+
+        _loading = false;
+    }
+
+    private async Task WithdrawAsync()
+    {
+        if (_player is null) return;
+        _saving = true;
+        await PlayerService.DropAsync(_player.Id);
+        _withdrawn = true;
+        _saving = false;
+    }
+}

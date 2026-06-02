@@ -1,0 +1,17 @@
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <PageTitle>Page not found — Xenopairings</PageTitle>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <div class="text-center" style="padding: 4rem 1rem;">
+                <div style="font-size: 4rem; margin-bottom: 1rem;">🎲</div>
+                <h1>Nothing here</h1>
+                <p class="text-muted">This page doesn't exist or may have been moved.</p>
+                <a href="/" class="btn btn-primary mt-3">Back to home</a>
+            </div>
+        </LayoutView>
+    </NotFound>
+</Router>

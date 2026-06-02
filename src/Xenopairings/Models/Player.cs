@@ -1,0 +1,15 @@
+namespace Xenopairings.Models;
+
+public class Player
+{
+    public Guid Id { get; set; }
+    public Guid TournamentId { get; set; }
+    public Tournament Tournament { get; set; } = null!;
+    public string Name { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public string? ArmyFaction { get; set; }
+    public string? ArmyList { get; set; }  // free text, can be long
+    public string EditToken { get; set; } = string.Empty;
+    public DateTimeOffset RegisteredAt { get; set; }
+    public bool IsDropped { get; set; }  // withdrawn from tournament mid-event
+}

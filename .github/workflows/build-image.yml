@@ -1,0 +1,53 @@
+name: Build & push image
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    name: Build & test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build (Release)
+        run: dotnet build tests/Xenopairings.Tests/Xenopairings.Tests.csproj -c Release
+
+      - name: Test (Release)
+        run: dotnet test tests/Xenopairings.Tests/Xenopairings.Tests.csproj -c Release
+
+  push-image:
+    name: Push image to GHCR
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    permissions:
+      contents: read
+      packages: write   # required to push to GHCR
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/xenopairings:latest
+            ghcr.io/${{ github.repository_owner }}/xenopairings:${{ github.sha }}

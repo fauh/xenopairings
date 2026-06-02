@@ -25,5 +25,8 @@ public record CreateTournamentRequest(
     string OrganizerName,
     string OrganizerEmail,
     bool IsPrivate = false,
-    bool RegistrationOpen = true
+    bool RegistrationOpen = true,
+    ScoringSystem ScoringSystem = ScoringSystem.Gw,
+    bool IsTeamEvent = false,
+    int? TeamSize = null
 );

@@ -2,6 +2,12 @@
 
 Newest entry first.
 
+## 2026-06-02 — Phase 3: team events + scoring systems (service + data layer)
+
+**Scoring systems**: `ScoringSystem` enum (GW / WTC). `WtcScoring` pure static converter (standard WTC 40K differential → 0–20 GP, always sums to 20). `StandingsService` updated to accept scoring system and count draws. `PlayerStanding` gains `Draws` field. `NewTournament` scoring picker.
+
+**Team events**: `Tournament.IsTeamEvent` + `TeamSize`. `Team` + `TeamMatchup` models. `Player.TeamId` + `Match.TeamMatchupId` (both nullable). EF migration. `TeamStanding` record. `SwissTeamPairingService` (same algorithm as individual, operates on teams). `TeamStandingsService` — aggregates per-matchup BPs/GPs, applies WTC draw threshold `(TeamSize - 1)`. `ITeamService`/`TeamService` — create (with invite token) + join (with fullness guard). `RoundService` branched for individual vs team rounds. `IRoundService` extended with `GetTeamMatchupsAsync` + `AddMatchToTeamMatchupAsync`. `NewTournament` team event toggle + team size input. 68 tests, 0 failures. Team UI (tournament page registration, manage page team matchups, join team page) deferred to Phase 3b.
+
 ## 2026-06-02 — Phase 2: email + password login
 
 User accounts added. Email + password login via ASP.NET Core cookie auth (`IPasswordHasher<User>`, PBKDF2-SHA256). Token-in-URL identity retired — session email is now the sole credential.

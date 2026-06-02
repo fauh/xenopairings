@@ -12,4 +12,6 @@ public class Player
     public string EditToken { get; set; } = string.Empty;
     public DateTimeOffset RegisteredAt { get; set; }
     public bool IsDropped { get; set; }  // withdrawn from tournament mid-event
+    public Guid? TeamId { get; set; }
+    public Team? Team { get; set; }
 }

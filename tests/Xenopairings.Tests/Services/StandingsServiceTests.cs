@@ -18,7 +18,7 @@ public class StandingsServiceTests : IClassFixture<InMemoryDatabaseFixture>
     private RoundService BuildRoundSvc()
     {
         var ctx = _db.CreateDbContext();
-        return new RoundService(ctx, new StandingsService(ctx), NullLogger<RoundService>.Instance);
+        return new RoundService(ctx, new StandingsService(ctx), new TeamStandingsService(ctx), NullLogger<RoundService>.Instance);
     }
 
     private async Task<(Guid tid, Guid p1, Guid p2)> SeedTwoPlayerTournamentAsync()
@@ -72,7 +72,7 @@ public class StandingsServiceTests : IClassFixture<InMemoryDatabaseFixture>
         });
         await ctx.SaveChangesAsync();
 
-        var standings = await BuildSut().ComputeAsync(tid);
+        var standings = await BuildSut().ComputeAsync(tid, Xenopairings.Models.ScoringSystem.Gw);
         standings.ShouldBeEmpty();
     }
 
@@ -91,7 +91,7 @@ public class StandingsServiceTests : IClassFixture<InMemoryDatabaseFixture>
         // p1 wins 87–42
         await roundSvc.EnterScoresAsync(match.Id, 87, 42);
 
-        var standings = await BuildSut().ComputeAsync(tid);
+        var standings = await BuildSut().ComputeAsync(tid, Xenopairings.Models.ScoringSystem.Gw);
 
         var winner = standings.Single(s => s.Wins == 1);
         var loser  = standings.Single(s => s.Wins == 0);
@@ -115,7 +115,7 @@ public class StandingsServiceTests : IClassFixture<InMemoryDatabaseFixture>
 
         await roundSvc.EnterScoresAsync(match.Id, 50, 50);
 
-        var standings = await BuildSut().ComputeAsync(tid);
+        var standings = await BuildSut().ComputeAsync(tid, Xenopairings.Models.ScoringSystem.Gw);
         standings.ShouldAllBe(s => s.Wins == 0);
         standings.ShouldAllBe(s => s.TotalPoints == 50);
     }
@@ -147,7 +147,7 @@ public class StandingsServiceTests : IClassFixture<InMemoryDatabaseFixture>
         var roundSvc = BuildRoundSvc();
         await roundSvc.CreateWithPairingsAsync(tid, null);
 
-        var standings = await BuildSut().ComputeAsync(tid);
+        var standings = await BuildSut().ComputeAsync(tid, Xenopairings.Models.ScoringSystem.Gw);
         // One player got a bye — exactly one player has 1 win (the bye) before any other scoring
         standings.Count(s => s.Wins == 1).ShouldBeGreaterThanOrEqualTo(1);
     }
@@ -166,7 +166,7 @@ public class StandingsServiceTests : IClassFixture<InMemoryDatabaseFixture>
         // Decisive result so we can verify sort
         await roundSvc.EnterScoresAsync(match.Id, 100, 0);
 
-        var standings = await BuildSut().ComputeAsync(tid);
+        var standings = await BuildSut().ComputeAsync(tid, Xenopairings.Models.ScoringSystem.Gw);
 
         standings.Count.ShouldBe(2);
         standings[0].Wins.ShouldBeGreaterThanOrEqualTo(standings[1].Wins);

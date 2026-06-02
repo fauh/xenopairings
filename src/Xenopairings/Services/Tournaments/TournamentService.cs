@@ -36,6 +36,9 @@ public class TournamentService(
                 ManageToken = tokenGenerator.RandomUrlSafeString(22),
                 IsPrivate = request.IsPrivate,
                 RegistrationOpen = request.RegistrationOpen,
+                ScoringSystem = request.ScoringSystem,
+                IsTeamEvent = request.IsTeamEvent,
+                TeamSize = request.IsTeamEvent ? request.TeamSize : null,
                 CreatedAt = DateTimeOffset.UtcNow,
             };
 

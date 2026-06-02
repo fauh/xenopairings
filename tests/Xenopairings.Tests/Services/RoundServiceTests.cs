@@ -17,7 +17,7 @@ public class RoundServiceTests : IClassFixture<InMemoryDatabaseFixture>
     {
         var ctx = _db.CreateDbContext();
         var standings = new StandingsService(ctx);
-        return new RoundService(ctx, standings, NullLogger<RoundService>.Instance);
+        return new RoundService(ctx, standings, new TeamStandingsService(ctx), NullLogger<RoundService>.Instance);
     }
 
     private async Task<(Guid tournamentId, List<Guid> playerIds)> SeedTournamentAsync(int playerCount)

@@ -6,5 +6,6 @@ namespace Xenopairings.Services.Pairings;
 public record PlayerStanding(
     Guid PlayerId,
     int Wins,
+    int Draws,
     int TotalPoints
 );

@@ -74,6 +74,35 @@ else
         <div class="form-text">Your account email — used to identify you as the organizer.</div>
     </div>
 
+    <div class="mb-3">
+        <label class="form-label">Scoring system <span class="text-danger">*</span></label>
+        <InputRadioGroup @bind-Value="model.ScoringSystem">
+            <div class="form-check">
+                <InputRadio class="form-check-input" id="scoring-gw" Value="@ScoringSystem.Gw" />
+                <label class="form-check-label" for="scoring-gw">GW — straight battle points</label>
+            </div>
+            <div class="form-check">
+                <InputRadio class="form-check-input" id="scoring-wtc" Value="@ScoringSystem.Wtc" />
+                <label class="form-check-label" for="scoring-wtc">WTC — 0–20 game points via differential</label>
+            </div>
+        </InputRadioGroup>
+    </div>
+
+    <div class="mb-3 form-check">
+        <InputCheckbox id="isTeamEvent" class="form-check-input" @bind-Value="model.IsTeamEvent" />
+        <label class="form-check-label" for="isTeamEvent">Team event</label>
+        <div class="form-text">Players form teams and compete as a group.</div>
+    </div>
+
+    @if (model.IsTeamEvent)
+    {
+        <div class="mb-3">
+            <label class="form-label" for="teamSize">Players per team <span class="text-danger">*</span></label>
+            <InputNumber id="teamSize" class="form-control" @bind-Value="model.TeamSize" min="2" max="10" style="max-width:120px" />
+            <div class="form-text">All teams must have exactly this many players before rounds can start.</div>
+        </div>
+    }
+
     <div class="mb-3 form-check">
         <InputCheckbox id="isPrivate" class="form-check-input" @bind-Value="model.IsPrivate" />
         <label class="form-check-label" for="isPrivate">Private tournament (link-only)</label>
@@ -144,7 +173,10 @@ else
                 OrganizerName: model.OrganizerName,
                 OrganizerEmail: _email,
                 IsPrivate: model.IsPrivate,
-                RegistrationOpen: model.RegistrationOpen
+                RegistrationOpen: model.RegistrationOpen,
+                ScoringSystem: model.ScoringSystem,
+                IsTeamEvent: model.IsTeamEvent,
+                TeamSize: model.IsTeamEvent ? model.TeamSize : null
             ));
             Nav.NavigateTo($"/created/{tournament.Id}");
         }
@@ -179,6 +211,9 @@ else
         [System.ComponentModel.DataAnnotations.MaxLength(200)]
         public string OrganizerName { get; set; } = string.Empty;
 
+        public ScoringSystem ScoringSystem { get; set; } = ScoringSystem.Gw;
+        public bool IsTeamEvent { get; set; }
+        public int TeamSize { get; set; } = 3;
         public bool IsPrivate { get; set; }
         public bool RegistrationOpen { get; set; } = true;
     }

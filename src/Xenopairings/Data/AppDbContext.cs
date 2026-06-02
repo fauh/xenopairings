@@ -10,6 +10,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Player> Players => Set<Player>();
     public DbSet<Round> Rounds => Set<Round>();
     public DbSet<Match> Matches => Set<Match>();
+    public DbSet<Team> Teams => Set<Team>();
+    public DbSet<TeamMatchup> TeamMatchups => Set<TeamMatchup>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -71,6 +73,49 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany()
                 .HasForeignKey(x => x.Player2Id)
                 .OnDelete(DeleteBehavior.SetNull)
+                .IsRequired(false);
+            m.HasOne(x => x.TeamMatchup)
+                .WithMany()
+                .HasForeignKey(x => x.TeamMatchupId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired(false);
+        });
+
+        modelBuilder.Entity<Team>(t =>
+        {
+            t.HasKey(x => x.Id);
+            t.HasIndex(x => x.InviteToken).IsUnique();
+            t.HasOne(x => x.Tournament)
+                .WithMany()
+                .HasForeignKey(x => x.TournamentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Player>(p =>
+        {
+            // TeamId FK — optional, SetNull on team delete
+            p.HasOne(x => x.Team)
+                .WithMany(t => t.Players)
+                .HasForeignKey(x => x.TeamId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .IsRequired(false);
+        });
+
+        modelBuilder.Entity<TeamMatchup>(tm =>
+        {
+            tm.HasKey(x => x.Id);
+            tm.HasOne(x => x.Round)
+                .WithMany()
+                .HasForeignKey(x => x.RoundId)
+                .OnDelete(DeleteBehavior.Cascade);
+            tm.HasOne(x => x.Team1)
+                .WithMany()
+                .HasForeignKey(x => x.Team1Id)
+                .OnDelete(DeleteBehavior.Restrict);
+            tm.HasOne(x => x.Team2)
+                .WithMany()
+                .HasForeignKey(x => x.Team2Id)
+                .OnDelete(DeleteBehavior.Restrict)
                 .IsRequired(false);
         });
     }

@@ -17,4 +17,8 @@ public class Tournament
     public string ManageToken { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
     public bool RegistrationOpen { get; set; } = true;
+    public ScoringSystem ScoringSystem { get; set; } = ScoringSystem.Gw;
+    public bool IsTeamEvent { get; set; }
+    /// <summary>Number of players per team. Null for individual events.</summary>
+    public int? TeamSize { get; set; }
 }

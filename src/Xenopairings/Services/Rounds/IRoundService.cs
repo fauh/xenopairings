@@ -26,6 +26,18 @@ public interface IRoundService
 
     /// <summary>
     /// Marks a round complete. All matches in the round must be scored first.
+    /// For team rounds, all individual matches within all team matchups must be scored.
     /// </summary>
     Task CompleteRoundAsync(Guid roundId);
+
+    // ── Team-event additions ──────────────────────────────────────────────────
+
+    /// <summary>Returns the team matchups for a round with Team1, Team2 loaded.</summary>
+    Task<IReadOnlyList<TeamMatchup>> GetTeamMatchupsAsync(Guid roundId);
+
+    /// <summary>
+    /// Records one individual player matchup within a team matchup.
+    /// Each player must belong to the correct team. Players cannot be matched twice in the same round.
+    /// </summary>
+    Task<Match> AddMatchToTeamMatchupAsync(Guid teamMatchupId, Guid player1Id, Guid player2Id);
 }

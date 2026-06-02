@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xenopairings.Models;
+using Xenopairings.Services.Elo;
 using Xenopairings.Services.Email;
 using Xenopairings.Services.Rounds;
 using Xenopairings.Services.Standings;
@@ -23,6 +24,7 @@ public class RoundServiceTests : IClassFixture<InMemoryDatabaseFixture>
             ctx, standings, new TeamStandingsService(ctx),
             new NullEmailSender(),
             Options.Create(new EmailSettings { BaseUrl = "https://test.example" }),
+            new NullEloService(),
             NullLogger<RoundService>.Instance);
     }
 

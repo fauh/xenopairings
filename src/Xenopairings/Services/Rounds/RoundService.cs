@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Xenopairings.Data;
 using Xenopairings.Models;
+using Xenopairings.Services.Elo;
 using Xenopairings.Services.Email;
 using Xenopairings.Services.Pairings;
 using Xenopairings.Services.Standings;
@@ -14,6 +15,7 @@ public sealed class RoundService(
     TeamStandingsService teamStandingsService,
     IEmailSender emailSender,
     IOptions<EmailSettings> emailSettings,
+    IEloService eloService,
     ILogger<RoundService> logger) : IRoundService
 {
     public async Task<Round> CreateWithPairingsAsync(Guid tournamentId, string? missionLayout)
@@ -406,6 +408,15 @@ public sealed class RoundService(
         if (player1WentFirst.HasValue)  match.Player1WentFirst  = player1WentFirst;
         match.IsScored = true;
         await db.SaveChangesAsync();
+
+        // Update ELO ratings (fire-and-forget — don't fail score entry on ELO error)
+        _ = Task.Run(() => UpdateEloSafe(match.Id));
+    }
+
+    private async Task UpdateEloSafe(Guid matchId)
+    {
+        try { await eloService.UpdateMatchRatingsAsync(matchId); }
+        catch (Exception ex) { logger.LogWarning(ex, "ELO update failed for match {MatchId}.", matchId); }
     }
 
     public async Task SubmitMatchResultAsync(
@@ -448,6 +459,8 @@ public sealed class RoundService(
 
         match.IsScored = true;
         await db.SaveChangesAsync();
+
+        _ = Task.Run(() => UpdateEloSafe(match.Id));
     }
 
     public async Task CompleteRoundAsync(Guid roundId)

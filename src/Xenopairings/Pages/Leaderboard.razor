@@ -1,0 +1,78 @@
+@page "/leaderboard"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Xenopairings.Models
+@using Xenopairings.Services.Elo
+@inject IEloService EloService
+
+<PageTitle>Leaderboard — Xenopairings</PageTitle>
+
+<h1>Leaderboard</h1>
+<p class="text-muted">Global ELO rankings across all tournaments. Updated after each scored match.</p>
+
+@if (_loading)
+{
+    <LoadingSpinner />
+}
+else if (!_ratings.Any())
+{
+    <div class="empty-state">
+        <div class="empty-state-icon" aria-hidden="true">🏆</div>
+        <h3>No ratings yet</h3>
+        <p>Rankings appear once matches have been scored.</p>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th style="width:3rem">#</th>
+                    <th>Player</th>
+                    <th class="text-end" style="width:6rem">ELO</th>
+                    <th class="text-end" style="width:6rem">Games</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{var rank = 1;}
+                @foreach (var rating in _ratings)
+                {
+                    var isMe = string.Equals(rating.Email, _myEmail, StringComparison.OrdinalIgnoreCase);
+                    <tr class="@(isMe ? "table-primary fw-semibold" : "")">
+                        <td>
+                            @if (rank == 1) { <span>🥇</span> }
+                            else if (rank == 2) { <span>🥈</span> }
+                            else if (rank == 3) { <span>🥉</span> }
+                            else { <span class="text-muted">@rank</span> }
+                        </td>
+                        <td>
+                            @rating.DisplayName
+                            @if (isMe) { <span class="badge text-bg-primary ms-1 fw-normal small">you</span> }
+                        </td>
+                        <td class="text-end">@((int)Math.Round(rating.Rating))</td>
+                        <td class="text-end text-muted">@rating.GamesPlayed</td>
+                    </tr>
+                    rank++;
+                }
+            </tbody>
+        </table>
+    </div>
+    <p class="text-muted small mt-2">Starting ELO: 1000 · K-factor: 32</p>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private IReadOnlyList<PlayerRating> _ratings = [];
+    private string? _myEmail;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateTask;
+        _myEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+        _ratings = await EloService.GetLeaderboardAsync();
+        _loading = false;
+    }
+}

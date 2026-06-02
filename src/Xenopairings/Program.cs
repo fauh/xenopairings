@@ -13,6 +13,7 @@ using Xenopairings.Models;
 using Xenopairings.Services;
 using Xenopairings.Services.Auth;
 using Xenopairings.Services.Backups;
+using Xenopairings.Services.Elo;
 using Xenopairings.Services.Email;
 using Xenopairings.Services.Players;
 using Xenopairings.Services.Reminders;
@@ -145,6 +146,7 @@ builder.Services.AddScoped<IRoundService, RoundService>();
 // RoundService takes IEmailSender + IOptions<EmailSettings> — already registered above
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IEloService, EloService>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
 // ── Cookie authentication ─────────────────────────────────────────────────────

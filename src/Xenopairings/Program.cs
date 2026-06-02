@@ -1,12 +1,17 @@
 using Hangfire;
 using Hangfire.Storage.SQLite;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using System.Threading.RateLimiting;
 using Xenopairings;
 using Xenopairings.Data;
+using Xenopairings.Models;
 using Xenopairings.Services;
+using Xenopairings.Services.Auth;
 using Xenopairings.Services.Backups;
 using Xenopairings.Services.Email;
 using Xenopairings.Services.Players;
@@ -14,7 +19,6 @@ using Xenopairings.Services.Reminders;
 using Xenopairings.Services.Rounds;
 using Xenopairings.Services.Standings;
 using Xenopairings.Services.Tournaments;
-using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -136,6 +140,22 @@ builder.Services.AddScoped<ITournamentService, TournamentService>();
 builder.Services.AddScoped<IPlayerService, PlayerService>();
 builder.Services.AddScoped<StandingsService>();
 builder.Services.AddScoped<IRoundService, RoundService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+
+// ── Cookie authentication ─────────────────────────────────────────────────────
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/login";
+        options.LogoutPath = "/logout";
+        options.ExpireTimeSpan = TimeSpan.FromDays(30);
+        options.SlidingExpiration = true;
+        options.Cookie.Name = "xp_session";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+    });
+builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
@@ -156,6 +176,8 @@ app.UseRateLimiter();
 
 app.UseStaticFiles();
 app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
 if (app.Environment.IsDevelopment() && remindersSettings.Enabled)

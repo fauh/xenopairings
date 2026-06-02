@@ -1,4 +1,6 @@
 @page "/t/{Slug}"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
 @using Xenopairings.Models
 @using Xenopairings.Services.Tournaments
 @using Xenopairings.Services.Players
@@ -57,14 +59,22 @@ else
             <div class="card-body">
                 <h2 class="h5 card-title">Register for this tournament</h2>
 
-                @if (_registrationSuccess)
+                @if (_sessionEmail is null)
+                {
+                    <p class="text-muted">
+                        <a href="/login?returnUrl=/t/@Slug">Sign in</a> to register for this tournament.
+                    </p>
+                }
+                else if (_alreadyRegistered)
+                {
+                    <div class="alert alert-info">
+                        You're already registered. <a href="/t/@Slug/edit-registration">Edit your registration →</a>
+                    </div>
+                }
+                else if (_registrationSuccess)
                 {
                     <div class="alert alert-success" role="alert">
-                        You're registered!
-                        @if (!string.IsNullOrWhiteSpace(_myEditToken))
-                        {
-                            <span> Save your edit link: <a href="/t/@Slug/edit-registration?t=@_myEditToken">edit registration</a>.</span>
-                        }
+                        You're registered! View or edit from your <a href="/dashboard">dashboard</a>.
                     </div>
                 }
                 else
@@ -80,9 +90,9 @@ else
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label" for="playerEmail">Email</label>
-                            <InputText id="playerEmail" class="form-control" @bind-Value="_regModel.Email" type="email"
-                                placeholder="Optional — for edit link" />
+                            <label class="form-label">Email</label>
+                            <input class="form-control" type="email" value="@_sessionEmail" readonly />
+                            <div class="form-text">Your account email.</div>
                         </div>
 
                         <div class="mb-3">
@@ -218,6 +228,7 @@ else
 }
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
     [Parameter] public string Slug { get; set; } = string.Empty;
 
     private Tournament? _tournament;
@@ -226,6 +237,8 @@ else
     private Round? _currentRound;
     private List<Match> _currentMatches = [];
     private bool _loading = true;
+    private string? _sessionEmail;
+    private bool _alreadyRegistered;
 
     // Registration form
     private readonly RegModel _regModel = new();
@@ -233,17 +246,23 @@ else
     private bool _regSubmitting;
     private bool _registrationSuccess;
     private bool _myRegistrationSuccess;
-    private string? _myEditToken;
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateTask;
+        _sessionEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+
         _tournament = await TournamentService.GetBySlugAsync(Slug);
         if (_tournament is not null)
         {
             _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
             _standings = [.. await StandingsService.ComputeAsync(_tournament.Id)];
 
-            // Show the most recent round's pairings
+            if (_sessionEmail is not null)
+                _alreadyRegistered = _players.Any(p =>
+                    !p.IsDropped &&
+                    string.Equals(p.Email, _sessionEmail, StringComparison.OrdinalIgnoreCase));
+
             var rounds = await RoundService.ListByTournamentAsync(_tournament.Id);
             if (rounds.Any())
             {
@@ -256,19 +275,18 @@ else
 
     private async Task HandleRegister()
     {
-        if (_tournament is null) return;
+        if (_tournament is null || _sessionEmail is null) return;
         _regSubmitting = true;
         _regError = null;
         try
         {
-            var player = await PlayerService.RegisterAsync(new Services.Players.RegisterPlayerRequest(
+            await PlayerService.RegisterAsync(new Services.Players.RegisterPlayerRequest(
                 TournamentId: _tournament.Id,
                 Name: _regModel.Name,
-                Email: _regModel.Email,
+                Email: _sessionEmail,
                 ArmyFaction: _regModel.ArmyFaction,
                 ArmyList: _regModel.ArmyList
             ));
-            _myEditToken = player.EditToken;
             _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
             _standings = [.. await StandingsService.ComputeAsync(_tournament.Id)];
             _registrationSuccess = true;

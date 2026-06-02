@@ -5,6 +5,7 @@ namespace Xenopairings.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    public DbSet<User> Users => Set<User>();
     public DbSet<Tournament> Tournaments => Set<Tournament>();
     public DbSet<Player> Players => Set<Player>();
     public DbSet<Round> Rounds => Set<Round>();
@@ -12,6 +13,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<User>(u =>
+        {
+            u.HasKey(x => x.Id);
+            u.HasIndex(x => x.Email).IsUnique();
+            u.Property(x => x.Email)
+                .HasConversion(v => v.ToLowerInvariant(), v => v);
+        });
+
         modelBuilder.Entity<Tournament>(t =>
         {
             t.HasKey(x => x.Id);

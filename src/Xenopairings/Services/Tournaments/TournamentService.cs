@@ -106,6 +106,15 @@ public class TournamentService(
         return [.. tournaments.OrderByDescending(t => t.StartsAt)];
     }
 
+    public async Task<IReadOnlyList<Tournament>> ListByOrganizerEmailAsync(string email)
+    {
+        var normalised = email.Trim().ToLowerInvariant();
+        var tournaments = await db.Tournaments
+            .Where(t => t.OrganizerEmail == normalised)
+            .ToListAsync();
+        return [.. tournaments.OrderByDescending(t => t.StartsAt)];
+    }
+
     public async Task SetRegistrationOpenAsync(Guid tournamentId, bool open)
     {
         var tournament = await db.Tournaments.FindAsync(tournamentId);

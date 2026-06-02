@@ -9,6 +9,8 @@ public interface IPlayerService
     Task<IReadOnlyList<Player>> ListByTournamentAsync(Guid tournamentId);
     Task DropAsync(Guid playerId);
     Task UpdateRegistrationAsync(Guid playerId, string? armyFaction, string? armyList);
+    /// <summary>Returns all active registrations for an email, with Tournament loaded.</summary>
+    Task<IReadOnlyList<Player>> ListWithTournamentByEmailAsync(string email);
 }
 
 public record RegisterPlayerRequest(

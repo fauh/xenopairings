@@ -1,3 +1,6 @@
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+
 <nav class="app-topnav" aria-label="Main navigation">
     <a class="navbar-brand" href="/">Xenopairings</a>
 
@@ -5,6 +8,22 @@
         <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
         <NavLink class="nav-link" href="/tournaments">Browse</NavLink>
         <NavLink class="nav-link" href="/new">New tournament</NavLink>
+
+        <AuthorizeView>
+            <Authorized>
+                <NavLink class="nav-link" href="/dashboard">Dashboard</NavLink>
+                <form method="post" action="/logout" style="display:inline">
+                    @* Antiforgery token required for the logout POST *@
+                    <AntiforgeryToken />
+                    <button type="submit" class="nav-link btn btn-link p-0">Sign out</button>
+                </form>
+            </Authorized>
+            <NotAuthorized>
+                <a class="nav-link" href="/login">Sign in</a>
+                <a class="nav-link" href="/register">Register</a>
+            </NotAuthorized>
+        </AuthorizeView>
+
         <button class="btn-theme-toggle" @onclick="ToggleTheme"
                 aria-label="@(_isDark ? "Switch to light mode" : "Switch to dark mode")"
                 aria-pressed="@_isDark"

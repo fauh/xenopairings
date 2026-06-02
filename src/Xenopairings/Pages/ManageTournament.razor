@@ -1,4 +1,6 @@
 @page "/t/{Slug}/manage"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
 @using Xenopairings.Models
 @using Xenopairings.Services.Tournaments
 @using Xenopairings.Services.Players
@@ -235,8 +237,8 @@ else
 }
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
     [Parameter] public string Slug { get; set; } = string.Empty;
-    [SupplyParameterFromQuery(Name = "t")] public string? ManageToken { get; set; }
 
     private Tournament? _tournament;
     private List<Player> _players = [];
@@ -252,14 +254,22 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        if (!string.IsNullOrWhiteSpace(ManageToken))
-            _tournament = await TournamentService.GetByManageTokenAsync(ManageToken);
+        var authState = await AuthStateTask;
+        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
 
-        if (_tournament is not null && _tournament.Slug != Slug)
-            _tournament = null;
+        if (email is null)
+        {
+            Nav.NavigateTo($"/login?returnUrl=/t/{Slug}/manage", forceLoad: true);
+            return;
+        }
 
-        if (_tournament is not null)
+        var candidate = await TournamentService.GetBySlugAsync(Slug);
+        if (candidate is not null &&
+            string.Equals(candidate.OrganizerEmail, email, StringComparison.OrdinalIgnoreCase))
+        {
+            _tournament = candidate;
             await LoadAllAsync();
+        }
 
         _loading = false;
     }

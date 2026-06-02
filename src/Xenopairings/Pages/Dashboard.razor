@@ -1,0 +1,129 @@
+@page "/dashboard"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Xenopairings.Models
+@using Xenopairings.Services.Tournaments
+@using Xenopairings.Services.Players
+@inject ITournamentService TournamentService
+@inject IPlayerService PlayerService
+@inject NavigationManager Nav
+
+<PageTitle>Dashboard — Xenopairings</PageTitle>
+
+@if (_loading)
+{
+    <LoadingSpinner />
+}
+else
+{
+    <h1>Dashboard</h1>
+    <p class="text-muted mb-4">Signed in as <strong>@_email</strong></p>
+
+    @* ── Organizing ──────────────────────────────────────────────────────────── *@
+    <h2 class="h5">Organizing</h2>
+    @if (!_organizing.Any())
+    {
+        <p class="text-muted mb-4">You haven't created any tournaments yet.
+            <a href="/new">Create one →</a>
+        </p>
+    }
+    else
+    {
+        <div class="table-responsive mb-4">
+            <table class="table table-sm">
+                <thead>
+                    <tr><th>Tournament</th><th>Date</th><th>Players</th><th>Registration</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in _organizing)
+                    {
+                        <tr>
+                            <td><a href="/t/@t.Slug">@t.Title</a></td>
+                            <td class="text-nowrap">@t.StartsAt.ToLocalTime().ToString("d MMM yyyy")</td>
+                            <td>@t.NumberOfRounds rounds</td>
+                            <td>
+                                @if (t.IsClosed)
+                                {
+                                    <span class="badge text-bg-secondary">Closed</span>
+                                }
+                                else if (t.RegistrationOpen)
+                                {
+                                    <span class="badge text-bg-success">Open</span>
+                                }
+                                else
+                                {
+                                    <span class="badge text-bg-warning">Closed</span>
+                                }
+                            </td>
+                            <td>
+                                <a href="/t/@t.Slug/manage" class="btn btn-sm btn-outline-primary">Manage</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @* ── Playing in ───────────────────────────────────────────────────────────── *@
+    <h2 class="h5">Playing in</h2>
+    @if (!_playing.Any())
+    {
+        <p class="text-muted mb-4">You haven't registered for any tournaments yet.
+            <a href="/tournaments">Browse tournaments →</a>
+        </p>
+    }
+    else
+    {
+        <div class="table-responsive mb-4">
+            <table class="table table-sm">
+                <thead>
+                    <tr><th>Tournament</th><th>Date</th><th>Faction</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _playing)
+                    {
+                        <tr>
+                            <td><a href="/t/@p.Tournament.Slug">@p.Tournament.Title</a></td>
+                            <td class="text-nowrap">@p.Tournament.StartsAt.ToLocalTime().ToString("d MMM yyyy")</td>
+                            <td>@(p.ArmyFaction ?? "—")</td>
+                            <td>
+                                <a href="/t/@p.Tournament.Slug/edit-registration" class="btn btn-sm btn-outline-secondary">Edit</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <div class="mt-2">
+        <a href="/new" class="btn btn-primary btn-sm me-2">Create a tournament</a>
+        <a href="/tournaments" class="btn btn-outline-secondary btn-sm">Browse all</a>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private string? _email;
+    private List<Tournament> _organizing = [];
+    private List<Player> _playing = [];
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateTask;
+        _email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+
+        if (_email is null)
+        {
+            Nav.NavigateTo("/login", forceLoad: true);
+            return;
+        }
+
+        _organizing = [.. await TournamentService.ListByOrganizerEmailAsync(_email)];
+        _playing    = [.. await PlayerService.ListWithTournamentByEmailAsync(_email)];
+        _loading = false;
+    }
+}

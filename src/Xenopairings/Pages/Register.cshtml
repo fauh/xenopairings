@@ -1,0 +1,53 @@
+@page
+@model Xenopairings.Pages.RegisterModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create account — Xenopairings</title>
+    <link rel="stylesheet" href="~/css/bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+    <main class="page-content" style="max-width:420px">
+        <h1 class="mb-4">Create account</h1>
+
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <div class="alert alert-danger">@Model.ErrorMessage</div>
+        }
+
+        <form method="post">
+            @Html.AntiForgeryToken()
+            <div class="mb-3">
+                <label class="form-label" for="email">Email</label>
+                <input id="email" name="email" type="email" class="form-control"
+                       required autofocus value="@Model.Email" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="password">Password</label>
+                <input id="password" name="password" type="password" class="form-control"
+                       required minlength="8" />
+                <div class="form-text">Minimum 8 characters.</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="confirmPassword">Confirm password</label>
+                <input id="confirmPassword" name="confirmPassword" type="password"
+                       class="form-control" required />
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Create account</button>
+        </form>
+
+        <p class="mt-3 text-center text-muted">
+            Already have an account? <a href="/login">Sign in</a>
+        </p>
+        <p class="text-center">
+            <a href="/" class="text-muted small">Back to home</a>
+        </p>
+    </main>
+</body>
+</html>

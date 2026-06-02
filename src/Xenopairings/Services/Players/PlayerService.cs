@@ -59,6 +59,16 @@ public class PlayerService(
         await db.SaveChangesAsync();
     }
 
+    public async Task<IReadOnlyList<Player>> ListWithTournamentByEmailAsync(string email)
+    {
+        var normalised = email.Trim().ToLowerInvariant();
+        var players = await db.Players
+            .Include(p => p.Tournament)
+            .Where(p => p.Email == normalised && !p.IsDropped)
+            .ToListAsync();
+        return [.. players.OrderByDescending(p => p.Tournament.StartsAt)];
+    }
+
     public async Task UpdateRegistrationAsync(Guid playerId, string? armyFaction, string? armyList)
     {
         var player = await db.Players.FindAsync(playerId);

@@ -11,6 +11,8 @@ public interface ITournamentService
     Task SetRegistrationOpenAsync(Guid tournamentId, bool open);
     /// <summary>Returns all non-private tournaments, newest first.</summary>
     Task<IReadOnlyList<Tournament>> ListPublicAsync();
+    /// <summary>Returns tournaments where OrganizerEmail matches, newest first.</summary>
+    Task<IReadOnlyList<Tournament>> ListByOrganizerEmailAsync(string email);
 }
 
 public record CreateTournamentRequest(

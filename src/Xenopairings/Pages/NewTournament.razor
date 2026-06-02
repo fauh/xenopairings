@@ -1,4 +1,6 @@
 @page "/new"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
 @using Xenopairings.Models
 @using Xenopairings.Services.Tournaments
 @inject ITournamentService TournamentService
@@ -6,6 +8,15 @@
 @inject IJSRuntime JS
 
 <PageTitle>New tournament — Xenopairings</PageTitle>
+
+@if (_email is null && !_loading)
+{
+    <div class="alert alert-warning">
+        You need to <a href="/login">sign in</a> to create a tournament.
+    </div>
+}
+else
+{
 
 <h1>Create a tournament</h1>
 
@@ -58,10 +69,9 @@
     </div>
 
     <div class="mb-3">
-        <label class="form-label" for="organizerEmail">Your email <span class="text-danger">*</span></label>
-        <InputText id="organizerEmail" class="form-control" @bind-Value="model.OrganizerEmail" type="email"
-            placeholder="The manage link will be emailed here" />
-        <ValidationMessage For="@(() => model.OrganizerEmail)" />
+        <label class="form-label">Your email</label>
+        <input class="form-control" type="email" value="@_email" readonly />
+        <div class="form-text">Your account email — used to identify you as the organizer.</div>
     </div>
 
     <div class="mb-3 form-check">
@@ -86,10 +96,23 @@
     </button>
 </EditForm>
 
+}
+
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
     private readonly FormModel model = new();
     private string? errorMessage;
     private bool isSubmitting;
+    private string? _email;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateTask;
+        _email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+        _loading = false;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -100,15 +123,13 @@
             if (!string.IsNullOrWhiteSpace(tz))
                 model.TimeZoneId = tz;
         }
-        catch
-        {
-            // JS interop can fail during prerender — UTC fallback stays
-        }
+        catch { }
         StateHasChanged();
     }
 
     private async Task HandleSubmit()
     {
+        if (_email is null) return;
         isSubmitting = true;
         errorMessage = null;
         try
@@ -121,7 +142,7 @@
                 NumberOfRounds: model.NumberOfRounds,
                 MaxPlayers: model.MaxPlayers,
                 OrganizerName: model.OrganizerName,
-                OrganizerEmail: model.OrganizerEmail,
+                OrganizerEmail: _email,
                 IsPrivate: model.IsPrivate,
                 RegistrationOpen: model.RegistrationOpen
             ));
@@ -157,11 +178,6 @@
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Your name is required.")]
         [System.ComponentModel.DataAnnotations.MaxLength(200)]
         public string OrganizerName { get; set; } = string.Empty;
-
-        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Your email is required.")]
-        [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Enter a valid email address.")]
-        [System.ComponentModel.DataAnnotations.MaxLength(200)]
-        public string OrganizerEmail { get; set; } = string.Empty;
 
         public bool IsPrivate { get; set; }
         public bool RegistrationOpen { get; set; } = true;

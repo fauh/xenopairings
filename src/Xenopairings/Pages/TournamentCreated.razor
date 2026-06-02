@@ -13,52 +13,33 @@
 else
 {
     <h1>Tournament created!</h1>
-    <p class="text-muted">Save your manage link — it's the only way to manage your tournament.</p>
 
-    <div class="card mb-4" style="max-width:640px">
+    <div class="card mb-4" style="max-width:560px">
         <div class="card-body">
             <h5 class="card-title">@_tournament.Title</h5>
-            <p class="card-text text-muted mb-3">Your manage link:</p>
-            <div class="input-group mb-2">
-                <input type="text" class="form-control font-monospace" readonly
-                       value="@ManageUrl" id="manage-url" />
-                <button class="btn btn-outline-secondary" type="button" @onclick="CopyManageUrl">Copy</button>
-            </div>
-            @if (_copied)
-            {
-                <small class="text-success">Copied!</small>
-            }
-            <p class="form-text mt-2">This link has been emailed to <strong>@_tournament.OrganizerEmail</strong>.</p>
+            <p class="card-text text-muted">
+                @_tournament.NumberOfRounds rounds · up to @_tournament.MaxPlayers players
+            </p>
         </div>
     </div>
 
-    <a href="/t/@_tournament.Slug" class="btn btn-outline-primary me-2">View tournament page</a>
-    <a href="@ManageUrl" class="btn btn-primary">Go to manage page</a>
+    <a href="/t/@_tournament.Slug" class="btn btn-outline-primary me-2">View public page</a>
+    <a href="/t/@_tournament.Slug/manage" class="btn btn-primary">Manage tournament</a>
+
+    <p class="mt-3 text-muted small">
+        Find this tournament anytime from your <a href="/dashboard">dashboard</a>.
+    </p>
 }
 
 @code {
     [Parameter] public Guid TournamentId { get; set; }
-    [Inject] private IJSRuntime JS { get; set; } = default!;
 
     private Tournament? _tournament;
-    private bool _copied;
-
-    private string ManageUrl =>
-        _tournament is null ? "" :
-        $"{Nav.BaseUri}t/{_tournament.Slug}/manage?t={_tournament.ManageToken}";
 
     protected override async Task OnInitializedAsync()
     {
-        // Load by ID — manage token is embedded in URL via ManageUrl computed above
         _tournament = await TournamentService.GetByIdAsync(TournamentId);
         if (_tournament is null)
             Nav.NavigateTo("/");
-    }
-
-    private async Task CopyManageUrl()
-    {
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", ManageUrl);
-        _copied = true;
-        StateHasChanged();
     }
 }

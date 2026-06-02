@@ -33,11 +33,43 @@ else
     <div class="card mb-4" style="max-width:500px">
         <div class="card-body">
             <h2 class="h5 card-title">Your details</h2>
-            <dl class="mb-3">
-                <dt>Name</dt><dd>@_player.Name</dd>
-                <dt>Faction</dt><dd>@(_player.ArmyFaction ?? "—")</dd>
-                <dt>Email</dt><dd>@(_player.Email ?? "—")</dd>
-            </dl>
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Name</label>
+                <p class="mb-0">@_player.Name</p>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Email</label>
+                <p class="mb-0">@(_player.Email ?? "—")</p>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="editFaction">Army / Faction</label>
+                <input id="editFaction" class="form-control" @bind="_editFaction"
+                       maxlength="200" placeholder="e.g. Space Marines" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="editArmyList">Army list</label>
+                <textarea id="editArmyList" class="form-control" rows="8"
+                          @bind="_editArmyList"
+                          placeholder="Paste your army list here"></textarea>
+            </div>
+
+            @if (_saveSuccess)
+            {
+                <div class="alert alert-success py-2" role="alert">Saved!</div>
+            }
+            @if (!string.IsNullOrEmpty(_saveError))
+            {
+                <div class="alert alert-danger py-2" role="alert">@_saveError</div>
+            }
+
+            <button class="btn btn-primary btn-sm me-2" @onclick="SaveAsync" disabled="@_saving">
+                @(_saving ? "Saving…" : "Save changes")
+            </button>
+
+            <hr class="my-3" />
 
             @if (!_withdrawConfirm)
             {
@@ -47,7 +79,7 @@ else
             }
             else
             {
-                <p class="text-danger">Are you sure you want to withdraw?</p>
+                <p class="text-danger mb-2">Are you sure you want to withdraw?</p>
                 <button class="btn btn-danger btn-sm me-2" @onclick="WithdrawAsync" disabled="@_saving">
                     @(_saving ? "Withdrawing…" : "Yes, withdraw")
                 </button>
@@ -66,15 +98,50 @@ else
     private Player? _player;
     private bool _loading = true;
     private bool _saving;
+    private bool _saveSuccess;
     private bool _withdrawConfirm;
     private bool _withdrawn;
+    private string? _saveError;
+
+    // Editable fields
+    private string? _editFaction;
+    private string? _editArmyList;
 
     protected override async Task OnInitializedAsync()
     {
         if (!string.IsNullOrWhiteSpace(EditToken))
             _player = await PlayerService.GetByEditTokenAsync(EditToken);
 
+        if (_player is not null)
+        {
+            _editFaction = _player.ArmyFaction;
+            _editArmyList = _player.ArmyList;
+        }
+
         _loading = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_player is null) return;
+        _saving = true;
+        _saveSuccess = false;
+        _saveError = null;
+        try
+        {
+            await PlayerService.UpdateRegistrationAsync(_player.Id, _editFaction, _editArmyList);
+            _player.ArmyFaction = string.IsNullOrWhiteSpace(_editFaction) ? null : _editFaction.Trim();
+            _player.ArmyList = string.IsNullOrWhiteSpace(_editArmyList) ? null : _editArmyList.Trim();
+            _saveSuccess = true;
+        }
+        catch
+        {
+            _saveError = "Save failed. Please try again.";
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 
     private async Task WithdrawAsync()

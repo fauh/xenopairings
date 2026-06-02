@@ -11,6 +11,8 @@ using Xenopairings.Services.Backups;
 using Xenopairings.Services.Email;
 using Xenopairings.Services.Players;
 using Xenopairings.Services.Reminders;
+using Xenopairings.Services.Rounds;
+using Xenopairings.Services.Standings;
 using Xenopairings.Services.Tournaments;
 using System.Threading.RateLimiting;
 
@@ -132,6 +134,8 @@ builder.Services.AddSingleton<TokenGenerator>();
 builder.Services.AddSingleton<SlugGenerator>();
 builder.Services.AddScoped<ITournamentService, TournamentService>();
 builder.Services.AddScoped<IPlayerService, PlayerService>();
+builder.Services.AddScoped<StandingsService>();
+builder.Services.AddScoped<IRoundService, RoundService>();
 
 var app = builder.Build();
 

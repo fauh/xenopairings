@@ -57,4 +57,18 @@ public class PlayerService(
         player.IsDropped = true;
         await db.SaveChangesAsync();
     }
+
+    public async Task UpdateRegistrationAsync(Guid playerId, string? armyFaction, string? armyList)
+    {
+        var player = await db.Players.FindAsync(playerId);
+        if (player is null)
+        {
+            logger.LogWarning("UpdateRegistrationAsync: player {PlayerId} not found.", playerId);
+            return;
+        }
+
+        player.ArmyFaction = string.IsNullOrWhiteSpace(armyFaction) ? null : armyFaction.Trim();
+        player.ArmyList = string.IsNullOrWhiteSpace(armyList) ? null : armyList.Trim();
+        await db.SaveChangesAsync();
+    }
 }

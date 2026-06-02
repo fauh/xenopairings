@@ -2,8 +2,10 @@
 @using Xenopairings.Models
 @using Xenopairings.Services.Tournaments
 @using Xenopairings.Services.Players
+@using Xenopairings.Services.Rounds
 @inject ITournamentService TournamentService
 @inject IPlayerService PlayerService
+@inject IRoundService RoundService
 @inject NavigationManager Nav
 
 <PageTitle>Manage — Xenopairings</PageTitle>
@@ -28,12 +30,13 @@ else
         <a href="/t/@_tournament.Slug" class="btn btn-outline-secondary btn-sm">Public view</a>
     </div>
 
-    @* ── Registration controls ─────────────────────────────────────────────── *@
+    @* ── Registration ──────────────────────────────────────────────────────────── *@
     <div class="card mb-4">
         <div class="card-body">
             <h2 class="h5 card-title">Registration</h2>
             <p class="card-text text-muted">
                 Status: <strong>@(_tournament.RegistrationOpen ? "Open" : "Closed")</strong>
+                &nbsp;·&nbsp; @_players.Count(p => !p.IsDropped) / @_tournament.MaxPlayers players
             </p>
             <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleRegistration" disabled="@_saving">
                 @(_tournament.RegistrationOpen ? "Close registration" : "Open registration")
@@ -41,11 +44,11 @@ else
         </div>
     </div>
 
-    @* ── Players ──────────────────────────────────────────────────────────── *@
-    <h2 class="h5">Players (@_players.Count)</h2>
+    @* ── Players ───────────────────────────────────────────────────────────────── *@
+    <h2 class="h5">Players</h2>
     @if (!_players.Any())
     {
-        <p class="text-muted">No players yet.</p>
+        <p class="text-muted mb-4">No players yet.</p>
     }
     else
     {
@@ -77,9 +80,157 @@ else
         </div>
     }
 
+    @* ── Rounds ────────────────────────────────────────────────────────────────── *@
+    <h2 class="h5 mt-4">Rounds</h2>
+
+    @if (!_rounds.Any())
+    {
+        <p class="text-muted">No rounds yet. Create the first round below to generate pairings.</p>
+    }
+
+    @foreach (var round in _rounds)
+    {
+        var matches = _matchesByRound.GetValueOrDefault(round.Id, []);
+        <div class="card mb-3">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <strong>Round @round.RoundNumber</strong>
+                @if (!string.IsNullOrWhiteSpace(round.MissionLayout))
+                {
+                    <span class="text-muted small ms-2">@round.MissionLayout</span>
+                }
+                @if (round.IsComplete)
+                {
+                    <span class="badge text-bg-success ms-auto">Complete</span>
+                }
+                else
+                {
+                    <span class="badge text-bg-warning ms-auto">In progress</span>
+                }
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Table</th>
+                                <th>Player 1</th>
+                                <th>Player 2</th>
+                                <th style="width:120px">Scores</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var match in matches)
+                            {
+                                var isBye = match.Player2Id is null;
+                                <tr>
+                                    <td>@match.TableNumber</td>
+                                    <td>@(match.Player1?.Name ?? "—")</td>
+                                    <td>@(isBye ? "— (bye)" : (match.Player2?.Name ?? "—"))</td>
+                                    <td>
+                                        @if (isBye)
+                                        {
+                                            <span class="text-muted small">auto</span>
+                                        }
+                                        else if (match.IsScored)
+                                        {
+                                            <span>@match.Player1Score — @match.Player2Score</span>
+                                        }
+                                        else
+                                        {
+                                            @* Score entry inputs *@
+                                            var inputs = GetScoreInputs(match.Id);
+                                            <div class="d-flex gap-1 align-items-center">
+                                                <input type="number" class="form-control form-control-sm" style="width:60px"
+                                                       min="0" placeholder="P1"
+                                                       value="@inputs.p1"
+                                                       @oninput="e => SetScore(match.Id, true, e.Value?.ToString())" />
+                                                <span>—</span>
+                                                <input type="number" class="form-control form-control-sm" style="width:60px"
+                                                       min="0" placeholder="P2"
+                                                       value="@inputs.p2"
+                                                       @oninput="e => SetScore(match.Id, false, e.Value?.ToString())" />
+                                            </div>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (!match.IsScored && !isBye)
+                                        {
+                                            var inputs = GetScoreInputs(match.Id);
+                                            var canSave = inputs.p1 is not null && inputs.p2 is not null;
+                                            <button class="btn btn-sm btn-outline-primary"
+                                                    disabled="@(!canSave || _saving)"
+                                                    @onclick="() => SaveScore(match.Id)">
+                                                Save
+                                            </button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (!round.IsComplete)
+                {
+                    var allScored = matches.All(m => m.IsScored);
+                    <div class="card-footer">
+                        <button class="btn btn-sm btn-success"
+                                disabled="@(!allScored || _saving)"
+                                @onclick="() => CompleteRound(round.Id)"
+                                title="@(allScored ? "" : "Enter all scores first")">
+                            Complete round @round.RoundNumber
+                        </button>
+                        @if (!allScored)
+                        {
+                            <small class="text-muted ms-2">Enter all scores to complete the round.</small>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @* ── Create next round ─────────────────────────────────────────────────────── *@
+    @if (!_rounds.Any() || _rounds.Last().IsComplete)
+    {
+        @if ((_rounds.Count + 1) <= _tournament.NumberOfRounds
+            && _players.Count(p => !p.IsDropped) >= 2
+            && !_tournament.IsClosed)
+        {
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h3 class="h6 card-title mb-3">Create Round @(_rounds.Count + 1)</h3>
+                    <div class="mb-3" style="max-width:420px">
+                        <label class="form-label" for="missionLayout">Mission layout <span class="text-muted">(optional)</span></label>
+                        <input id="missionLayout" class="form-control" @bind="_newMissionLayout"
+                               placeholder="e.g. Priority Target — Sweep and Clear" maxlength="300" />
+                        <div class="form-text">Shown to players on the public page.</div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" @onclick="CreateRound" disabled="@_saving">
+                        @(_saving ? "Generating…" : $"Generate pairings for Round {_rounds.Count + 1}")
+                    </button>
+                </div>
+            </div>
+        }
+        else if (_rounds.Count >= _tournament.NumberOfRounds && _rounds.Any())
+        {
+            <div class="alert alert-success">
+                All @_tournament.NumberOfRounds rounds complete. <a href="/t/@_tournament.Slug">View final standings →</a>
+            </div>
+        }
+        else if (_players.Count(p => !p.IsDropped) < 2)
+        {
+            <p class="text-muted">At least 2 active players are required to create a round.</p>
+        }
+    }
+
     @if (!string.IsNullOrEmpty(_statusMessage))
     {
-        <div class="alert alert-info" role="alert">@_statusMessage</div>
+        <div class="alert alert-info mt-3" role="alert">@_statusMessage</div>
+    }
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-danger mt-3" role="alert">@_errorMessage</div>
     }
 }
 
@@ -89,40 +240,145 @@ else
 
     private Tournament? _tournament;
     private List<Player> _players = [];
+    private List<Round> _rounds = [];
+    private Dictionary<Guid, List<Match>> _matchesByRound = [];
+    // Transient score-input state: matchId → (p1 input, p2 input)
+    private Dictionary<Guid, (int? p1, int? p2)> _scoreInputs = [];
     private bool _loading = true;
     private bool _saving;
     private string? _statusMessage;
+    private string? _errorMessage;
+    private string? _newMissionLayout;
 
     protected override async Task OnInitializedAsync()
     {
         if (!string.IsNullOrWhiteSpace(ManageToken))
             _tournament = await TournamentService.GetByManageTokenAsync(ManageToken);
 
-        // Verify slug matches to prevent token fishing across tournaments
         if (_tournament is not null && _tournament.Slug != Slug)
             _tournament = null;
 
         if (_tournament is not null)
-            _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
+            await LoadAllAsync();
 
         _loading = false;
+    }
+
+    private async Task LoadAllAsync()
+    {
+        _players = [.. await PlayerService.ListByTournamentAsync(_tournament!.Id)];
+        _rounds = [.. await RoundService.ListByTournamentAsync(_tournament!.Id)];
+        _matchesByRound = [];
+        foreach (var round in _rounds)
+        {
+            var matches = await RoundService.GetMatchesAsync(round.Id);
+            _matchesByRound[round.Id] = [.. matches];
+        }
     }
 
     private async Task ToggleRegistration()
     {
         if (_tournament is null) return;
         _saving = true;
-        _tournament.RegistrationOpen = !_tournament.RegistrationOpen;
-        // TODO: persist via service in Phase 1
-        _statusMessage = $"Registration is now {(_tournament.RegistrationOpen ? "open" : "closed")} (not yet persisted — Phase 1 task).";
+        _errorMessage = null;
+        var newValue = !_tournament.RegistrationOpen;
+        await TournamentService.SetRegistrationOpenAsync(_tournament.Id, newValue);
+        _tournament.RegistrationOpen = newValue;
+        _statusMessage = $"Registration is now {(newValue ? "open" : "closed")}.";
         _saving = false;
     }
 
     private async Task DropPlayer(Guid playerId)
     {
         _saving = true;
+        _errorMessage = null;
         await PlayerService.DropAsync(playerId);
         _players = [.. await PlayerService.ListByTournamentAsync(_tournament!.Id)];
         _saving = false;
+    }
+
+    private async Task CreateRound()
+    {
+        if (_tournament is null) return;
+        _saving = true;
+        _errorMessage = null;
+        _statusMessage = null;
+        try
+        {
+            await RoundService.CreateWithPairingsAsync(_tournament.Id, _newMissionLayout);
+            _newMissionLayout = null;
+            await LoadAllAsync();
+            _statusMessage = $"Round {_rounds.Count} created with pairings.";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private (int? p1, int? p2) GetScoreInputs(Guid matchId)
+    {
+        _scoreInputs.TryGetValue(matchId, out var v);
+        return v;
+    }
+
+    private void SetScore(Guid matchId, bool isP1, string? raw)
+    {
+        _scoreInputs.TryGetValue(matchId, out var current);
+        var parsed = int.TryParse(raw, out var n) ? (int?)n : null;
+        _scoreInputs[matchId] = isP1 ? (parsed, current.p2) : (current.p1, parsed);
+    }
+
+    private async Task SaveScore(Guid matchId)
+    {
+        if (!_scoreInputs.TryGetValue(matchId, out var inputs)) return;
+        if (inputs.p1 is null || inputs.p2 is null) return;
+
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            await RoundService.EnterScoresAsync(matchId, inputs.p1.Value, inputs.p2.Value);
+            _scoreInputs.Remove(matchId);
+            // Refresh the round's matches
+            foreach (var round in _rounds)
+            {
+                var freshMatches = await RoundService.GetMatchesAsync(round.Id);
+                _matchesByRound[round.Id] = [.. freshMatches];
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task CompleteRound(Guid roundId)
+    {
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            await RoundService.CompleteRoundAsync(roundId);
+            await LoadAllAsync();
+            var round = _rounds.FirstOrDefault(r => r.Id == roundId);
+            _statusMessage = round is not null ? $"Round {round.RoundNumber} marked complete." : "Round completed.";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 }

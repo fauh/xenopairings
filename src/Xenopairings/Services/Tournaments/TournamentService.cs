@@ -96,6 +96,14 @@ public class TournamentService(
         }
     }
 
+    public async Task SetRegistrationOpenAsync(Guid tournamentId, bool open)
+    {
+        var tournament = await db.Tournaments.FindAsync(tournamentId);
+        if (tournament is null) return;
+        tournament.RegistrationOpen = open;
+        await db.SaveChangesAsync();
+    }
+
     private static bool IsUniqueConstraintViolation(DbUpdateException ex) =>
         ex.InnerException?.Message.Contains("UNIQUE") == true;
 }

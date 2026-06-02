@@ -8,6 +8,7 @@ public interface ITournamentService
     Task<Tournament?> GetByIdAsync(Guid id);
     Task<Tournament?> GetBySlugAsync(string slug);
     Task<Tournament?> GetByManageTokenAsync(string token);
+    Task SetRegistrationOpenAsync(Guid tournamentId, bool open);
 }
 
 public record CreateTournamentRequest(

@@ -2,8 +2,13 @@
 @using Xenopairings.Models
 @using Xenopairings.Services.Tournaments
 @using Xenopairings.Services.Players
+@using Xenopairings.Services.Rounds
+@using Xenopairings.Services.Standings
+@using Xenopairings.Services.Pairings
 @inject ITournamentService TournamentService
 @inject IPlayerService PlayerService
+@inject IRoundService RoundService
+@inject StandingsService StandingsService
 @inject NavigationManager Nav
 
 <PageTitle>@(_tournament?.Title ?? "Tournament") — Xenopairings</PageTitle>
@@ -38,11 +43,15 @@ else
             {
                 <span> · Registration closed</span>
             }
+            @if (_tournament.IsClosed)
+            {
+                <span> · Tournament closed</span>
+            }
         </small>
     </div>
 
-    @* ── Registration ─────────────────────────────────────────────────────── *@
-    @if (_tournament.RegistrationOpen && !_tournament.IsClosed)
+    @* ── Registration ──────────────────────────────────────────────────────────── *@
+    @if (_tournament.RegistrationOpen && !_tournament.IsClosed && !_myRegistrationSuccess)
     {
         <div class="card mb-4" style="max-width:500px">
             <div class="card-body">
@@ -51,7 +60,11 @@ else
                 @if (_registrationSuccess)
                 {
                     <div class="alert alert-success" role="alert">
-                        You're registered! An email with your edit link has been sent (if you provided an email).
+                        You're registered!
+                        @if (!string.IsNullOrWhiteSpace(_myEditToken))
+                        {
+                            <span> Save your edit link: <a href="/t/@Slug/edit-registration?t=@_myEditToken">edit registration</a>.</span>
+                        }
                     </div>
                 }
                 else
@@ -98,7 +111,85 @@ else
         </div>
     }
 
-    @* ── Players ──────────────────────────────────────────────────────────── *@
+    @* ── Current round pairings ────────────────────────────────────────────────── *@
+    @if (_currentRound is not null)
+    {
+        <h2 class="h5 mt-4">
+            Round @_currentRound.RoundNumber pairings
+            @if (!string.IsNullOrWhiteSpace(_currentRound.MissionLayout))
+            {
+                <small class="text-muted fw-normal ms-2">@_currentRound.MissionLayout</small>
+            }
+        </h2>
+        @if (!_currentMatches.Any())
+        {
+            <p class="text-muted">No pairings yet.</p>
+        }
+        else
+        {
+            <div class="table-responsive mb-4">
+                <table class="table table-sm">
+                    <thead>
+                        <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th>Result</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var match in _currentMatches)
+                        {
+                            <tr>
+                                <td>@match.TableNumber</td>
+                                <td>@(match.Player1?.Name ?? "—")</td>
+                                <td>@(match.Player2Id is null ? "— (bye)" : (match.Player2?.Name ?? "—"))</td>
+                                <td>
+                                    @if (match.Player2Id is null)
+                                    {
+                                        <span class="text-muted">bye</span>
+                                    }
+                                    else if (match.IsScored)
+                                    {
+                                        <span>@match.Player1Score — @match.Player2Score</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">pending</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+
+    @* ── Standings ─────────────────────────────────────────────────────────────── *@
+    @if (_standings.Any())
+    {
+        <h2 class="h5 mt-4">Standings</h2>
+        <div class="table-responsive mb-4">
+            <table class="table table-sm">
+                <thead>
+                    <tr><th>#</th><th>Player</th><th>Faction</th><th>W</th><th>Pts</th></tr>
+                </thead>
+                <tbody>
+                    @{var pos = 1;}
+                    @foreach (var standing in _standings)
+                    {
+                        var player = _players.FirstOrDefault(p => p.Id == standing.PlayerId);
+                        <tr>
+                            <td>@pos</td>
+                            <td>@(player?.Name ?? "—")</td>
+                            <td>@(player?.ArmyFaction ?? "—")</td>
+                            <td>@standing.Wins</td>
+                            <td>@standing.TotalPoints</td>
+                        </tr>
+                        pos++;
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @* ── Players ───────────────────────────────────────────────────────────────── *@
     <h2 class="h5 mt-4">Players (@_players.Count(p => !p.IsDropped))</h2>
     @if (!_players.Any())
     {
@@ -131,6 +222,9 @@ else
 
     private Tournament? _tournament;
     private List<Player> _players = [];
+    private List<PlayerStanding> _standings = [];
+    private Round? _currentRound;
+    private List<Match> _currentMatches = [];
     private bool _loading = true;
 
     // Registration form
@@ -138,12 +232,25 @@ else
     private string? _regError;
     private bool _regSubmitting;
     private bool _registrationSuccess;
+    private bool _myRegistrationSuccess;
+    private string? _myEditToken;
 
     protected override async Task OnInitializedAsync()
     {
         _tournament = await TournamentService.GetBySlugAsync(Slug);
         if (_tournament is not null)
+        {
             _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
+            _standings = [.. await StandingsService.ComputeAsync(_tournament.Id)];
+
+            // Show the most recent round's pairings
+            var rounds = await RoundService.ListByTournamentAsync(_tournament.Id);
+            if (rounds.Any())
+            {
+                _currentRound = rounds.Last();
+                _currentMatches = [.. await RoundService.GetMatchesAsync(_currentRound.Id)];
+            }
+        }
         _loading = false;
     }
 
@@ -154,15 +261,17 @@ else
         _regError = null;
         try
         {
-            await PlayerService.RegisterAsync(new Services.Players.RegisterPlayerRequest(
+            var player = await PlayerService.RegisterAsync(new Services.Players.RegisterPlayerRequest(
                 TournamentId: _tournament.Id,
                 Name: _regModel.Name,
                 Email: _regModel.Email,
                 ArmyFaction: _regModel.ArmyFaction,
                 ArmyList: _regModel.ArmyList
             ));
+            _myEditToken = player.EditToken;
             _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
             _registrationSuccess = true;
+            _myRegistrationSuccess = true;
         }
         catch
         {

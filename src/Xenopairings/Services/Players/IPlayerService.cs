@@ -8,6 +8,7 @@ public interface IPlayerService
     Task<Player?> GetByEditTokenAsync(string editToken);
     Task<IReadOnlyList<Player>> ListByTournamentAsync(Guid tournamentId);
     Task DropAsync(Guid playerId);
+    Task UpdateRegistrationAsync(Guid playerId, string? armyFaction, string? armyList);
 }
 
 public record RegisterPlayerRequest(

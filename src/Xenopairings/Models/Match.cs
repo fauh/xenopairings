@@ -15,6 +15,10 @@ public class Match
     public int? Player2Score { get; set; }
     // true when both scores are entered
     public bool IsScored { get; set; }
+    /// <summary>True = Player1 was the attacker (deployed second). Null = not yet recorded.</summary>
+    public bool? Player1IsAttacker { get; set; }
+    /// <summary>True = Player1 had the first turn. Null = not yet recorded.</summary>
+    public bool? Player1WentFirst { get; set; }
     /// <summary>Null for individual-event matches. Set for matches inside a team matchup.</summary>
     public Guid? TeamMatchupId { get; set; }
     public TeamMatchup? TeamMatchup { get; set; }

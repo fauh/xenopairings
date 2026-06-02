@@ -117,7 +117,9 @@ else
                                 <th>Table</th>
                                 <th>Player 1</th>
                                 <th>Player 2</th>
-                                <th style="width:120px">Scores</th>
+                                <th>First turn</th>
+                                <th>Attacker</th>
+                                <th style="width:130px">Scores</th>
                                 <th></th>
                             </tr>
                         </thead>
@@ -129,6 +131,34 @@ else
                                     <td>@match.TableNumber</td>
                                     <td>@(match.Player1?.Name ?? "—")</td>
                                     <td>@(isBye ? "— (bye)" : (match.Player2?.Name ?? "—"))</td>
+                                    <td class="text-muted small">
+                                        @if (match.Player1WentFirst == true) { <span>@(match.Player1?.Name ?? "P1")</span> }
+                                        else if (match.Player1WentFirst == false) { <span>@(match.Player2?.Name ?? "P2")</span> }
+                                        else if (!isBye && !match.IsScored)
+                                        {
+                                            <select class="form-select form-select-sm"
+                                                    @onchange="e => SetFirstTurn(match.Id, e.Value?.ToString())">
+                                                <option value="">—</option>
+                                                <option value="p1">@(match.Player1?.Name ?? "P1")</option>
+                                                <option value="p2">@(match.Player2?.Name ?? "P2")</option>
+                                            </select>
+                                        }
+                                        else { <span>—</span> }
+                                    </td>
+                                    <td class="text-muted small">
+                                        @if (match.Player1IsAttacker == true) { <span>@(match.Player1?.Name ?? "P1")</span> }
+                                        else if (match.Player1IsAttacker == false) { <span>@(match.Player2?.Name ?? "P2")</span> }
+                                        else if (!isBye && !match.IsScored)
+                                        {
+                                            <select class="form-select form-select-sm"
+                                                    @onchange="e => SetAttacker(match.Id, e.Value?.ToString())">
+                                                <option value="">—</option>
+                                                <option value="p1">@(match.Player1?.Name ?? "P1")</option>
+                                                <option value="p2">@(match.Player2?.Name ?? "P2")</option>
+                                            </select>
+                                        }
+                                        else { <span>—</span> }
+                                    </td>
                                     <td>
                                         @if (isBye)
                                         {
@@ -140,7 +170,6 @@ else
                                         }
                                         else
                                         {
-                                            @* Score entry inputs *@
                                             var inputs = GetScoreInputs(match.Id);
                                             <div class="d-flex gap-1 align-items-center">
                                                 <input type="number" class="form-control form-control-sm" style="width:60px"
@@ -246,6 +275,9 @@ else
     private Dictionary<Guid, List<Match>> _matchesByRound = [];
     // Transient score-input state: matchId → (p1 input, p2 input)
     private Dictionary<Guid, (int? p1, int? p2)> _scoreInputs = [];
+    // First-turn and attacker pending selections before the score is saved
+    private Dictionary<Guid, bool?> _firstTurnInputs = [];
+    private Dictionary<Guid, bool?> _attackerInputs = [];
     private bool _loading = true;
     private bool _saving;
     private string? _statusMessage;
@@ -343,17 +375,35 @@ else
         _scoreInputs[matchId] = isP1 ? (parsed, current.p2) : (current.p1, parsed);
     }
 
+    private void SetFirstTurn(Guid matchId, string? value)
+    {
+        _firstTurnInputs[matchId] = value == "p1" ? true : value == "p2" ? false : null;
+    }
+
+    private void SetAttacker(Guid matchId, string? value)
+    {
+        _attackerInputs[matchId] = value == "p1" ? true : value == "p2" ? false : null;
+    }
+
     private async Task SaveScore(Guid matchId)
     {
         if (!_scoreInputs.TryGetValue(matchId, out var inputs)) return;
         if (inputs.p1 is null || inputs.p2 is null) return;
 
+        _firstTurnInputs.TryGetValue(matchId, out var p1WentFirst);
+        _attackerInputs.TryGetValue(matchId, out var p1IsAttacker);
+
         _saving = true;
         _errorMessage = null;
         try
         {
-            await RoundService.EnterScoresAsync(matchId, inputs.p1.Value, inputs.p2.Value);
+            await RoundService.EnterScoresAsync(
+                matchId, inputs.p1.Value, inputs.p2.Value,
+                player1IsAttacker: p1IsAttacker,
+                player1WentFirst: p1WentFirst);
             _scoreInputs.Remove(matchId);
+            _firstTurnInputs.Remove(matchId);
+            _attackerInputs.Remove(matchId);
             // Refresh the round's matches
             foreach (var round in _rounds)
             {

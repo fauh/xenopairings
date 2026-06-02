@@ -255,7 +255,12 @@ public sealed class RoundService(
 
     // ── Score entry ───────────────────────────────────────────────────────────
 
-    public async Task EnterScoresAsync(Guid matchId, int player1Score, int player2Score)
+    public async Task EnterScoresAsync(
+        Guid matchId,
+        int player1Score,
+        int player2Score,
+        bool? player1IsAttacker = null,
+        bool? player1WentFirst = null)
     {
         if (player1Score < 0 || player2Score < 0)
             throw new ArgumentException("Scores must be non-negative.");
@@ -268,6 +273,50 @@ public sealed class RoundService(
 
         match.Player1Score = player1Score;
         match.Player2Score = player2Score;
+        if (player1IsAttacker.HasValue) match.Player1IsAttacker = player1IsAttacker;
+        if (player1WentFirst.HasValue)  match.Player1WentFirst  = player1WentFirst;
+        match.IsScored = true;
+        await db.SaveChangesAsync();
+    }
+
+    public async Task SubmitMatchResultAsync(
+        Guid matchId,
+        Guid submittingPlayerId,
+        int myScore,
+        int opponentScore,
+        bool iWentFirst,
+        bool iWasAttacker)
+    {
+        if (myScore < 0 || opponentScore < 0)
+            throw new ArgumentException("Scores must be non-negative.");
+
+        var match = await db.Matches.FindAsync(matchId)
+            ?? throw new InvalidOperationException($"Match {matchId} not found.");
+
+        if (match.Player2Id is null)
+            throw new InvalidOperationException("Cannot submit a result for a bye match.");
+
+        bool isPlayer1 = match.Player1Id == submittingPlayerId;
+        bool isPlayer2 = match.Player2Id == submittingPlayerId;
+
+        if (!isPlayer1 && !isPlayer2)
+            throw new InvalidOperationException("You are not a participant in this match.");
+
+        if (isPlayer1)
+        {
+            match.Player1Score      = myScore;
+            match.Player2Score      = opponentScore;
+            match.Player1IsAttacker = iWasAttacker;
+            match.Player1WentFirst  = iWentFirst;
+        }
+        else // isPlayer2
+        {
+            match.Player1Score      = opponentScore;
+            match.Player2Score      = myScore;
+            match.Player1IsAttacker = !iWasAttacker;
+            match.Player1WentFirst  = !iWentFirst;
+        }
+
         match.IsScored = true;
         await db.SaveChangesAsync();
     }

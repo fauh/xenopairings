@@ -131,6 +131,100 @@ else
                 <small class="text-muted fw-normal ms-2">@_currentRound.MissionLayout</small>
             }
         </h2>
+
+        @* ── Player's own match: submit result ──────────────────────────────── *@
+        @if (_myCurrentMatch is not null && !_myCurrentMatch.IsScored && _myCurrentMatch.Player2Id is not null)
+        {
+            var opponent = _myCurrentMatch.Player1Id == _myPlayerId
+                ? _myCurrentMatch.Player2
+                : _myCurrentMatch.Player1;
+
+            <div class="card mb-4" style="max-width:480px">
+                <div class="card-body">
+                    <h3 class="h6 card-title">Submit your result — Table @_myCurrentMatch.TableNumber</h3>
+                    <p class="text-muted small mb-3">vs <strong>@(opponent?.Name ?? "opponent")</strong></p>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col">
+                            <label class="form-label small">Your score</label>
+                            <input type="number" class="form-control form-control-sm" min="0"
+                                   @bind="_submitMyScore" placeholder="0" />
+                        </div>
+                        <div class="col">
+                            <label class="form-label small">Opponent score</label>
+                            <input type="number" class="form-control form-control-sm" min="0"
+                                   @bind="_submitOpponentScore" placeholder="0" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small">First turn</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="firstTurn-@_myCurrentMatch.Id"
+                                   id="firstTurn-me" @onchange="() => _submitIWentFirst = true"
+                                   checked="@(_submitIWentFirst == true)" />
+                            <label class="form-check-label small" for="firstTurn-me">I went first</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="firstTurn-@_myCurrentMatch.Id"
+                                   id="firstTurn-them" @onchange="() => _submitIWentFirst = false"
+                                   checked="@(_submitIWentFirst == false)" />
+                            <label class="form-check-label small" for="firstTurn-them">Opponent went first</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small">Role</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="role-@_myCurrentMatch.Id"
+                                   id="role-attacker" @onchange="() => _submitIWasAttacker = true"
+                                   checked="@(_submitIWasAttacker == true)" />
+                            <label class="form-check-label small" for="role-attacker">I was attacker</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="role-@_myCurrentMatch.Id"
+                                   id="role-defender" @onchange="() => _submitIWasAttacker = false"
+                                   checked="@(_submitIWasAttacker == false)" />
+                            <label class="form-check-label small" for="role-defender">I was defender</label>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(_submitError))
+                    {
+                        <div class="alert alert-danger py-2 small">@_submitError</div>
+                    }
+                    @if (_submitSuccess)
+                    {
+                        <div class="alert alert-success py-2 small">Result submitted!</div>
+                    }
+
+                    <button class="btn btn-primary btn-sm"
+                            @onclick="SubmitMatchResult"
+                            disabled="@(_submitMyScore is null || _submitOpponentScore is null
+                                        || _submitIWentFirst is null || _submitIWasAttacker is null
+                                        || _submitBusy)">
+                        Submit result
+                    </button>
+                </div>
+            </div>
+        }
+        else if (_myCurrentMatch is not null && _myCurrentMatch.IsScored)
+        {
+            <div class="alert alert-success mb-3 py-2 small">
+                <strong>Your result is recorded.</strong>
+                @if (_myCurrentMatch.Player1Score.HasValue && _myCurrentMatch.Player2Score.HasValue)
+                {
+                    var myScore = _myCurrentMatch.Player1Id == _myPlayerId
+                        ? _myCurrentMatch.Player1Score
+                        : _myCurrentMatch.Player2Score;
+                    var oppScore = _myCurrentMatch.Player1Id == _myPlayerId
+                        ? _myCurrentMatch.Player2Score
+                        : _myCurrentMatch.Player1Score;
+                    <span> @myScore — @oppScore</span>
+                }
+            </div>
+        }
+
         @if (!_currentMatches.Any())
         {
             <p class="text-muted">No pairings yet.</p>
@@ -140,15 +234,25 @@ else
             <div class="table-responsive mb-4">
                 <table class="table table-sm">
                     <thead>
-                        <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th>Result</th></tr>
+                        <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th>First</th><th>Role</th><th>Result</th></tr>
                     </thead>
                     <tbody>
                         @foreach (var match in _currentMatches)
                         {
-                            <tr>
+                            <tr class="@(match.Id == _myCurrentMatch?.Id ? "table-active" : "")">
                                 <td>@match.TableNumber</td>
                                 <td>@(match.Player1?.Name ?? "—")</td>
                                 <td>@(match.Player2Id is null ? "— (bye)" : (match.Player2?.Name ?? "—"))</td>
+                                <td class="text-muted small">
+                                    @if (match.Player1WentFirst == true) { <span>@(match.Player1?.Name ?? "P1")</span> }
+                                    else if (match.Player1WentFirst == false) { <span>@(match.Player2?.Name ?? "P2")</span> }
+                                    else { <span>—</span> }
+                                </td>
+                                <td class="text-muted small">
+                                    @if (match.Player1IsAttacker == true) { <span>@(match.Player1?.Name ?? "P1") atk</span> }
+                                    else if (match.Player1IsAttacker == false) { <span>@(match.Player2?.Name ?? "P2") atk</span> }
+                                    else { <span>—</span> }
+                                </td>
                                 <td>
                                     @if (match.Player2Id is null)
                                     {
@@ -238,6 +342,8 @@ else
     private List<Match> _currentMatches = [];
     private bool _loading = true;
     private string? _sessionEmail;
+    private Guid? _myPlayerId;
+    private Match? _myCurrentMatch;
     private bool _alreadyRegistered;
 
     // Registration form
@@ -246,6 +352,15 @@ else
     private bool _regSubmitting;
     private bool _registrationSuccess;
     private bool _myRegistrationSuccess;
+
+    // Match result submission
+    private int? _submitMyScore;
+    private int? _submitOpponentScore;
+    private bool? _submitIWentFirst;
+    private bool? _submitIWasAttacker;
+    private bool _submitBusy;
+    private string? _submitError;
+    private bool _submitSuccess;
 
     protected override async Task OnInitializedAsync()
     {
@@ -259,18 +374,61 @@ else
             _standings = [.. await StandingsService.ComputeAsync(_tournament.Id, _tournament.ScoringSystem)];
 
             if (_sessionEmail is not null)
-                _alreadyRegistered = _players.Any(p =>
+            {
+                var myPlayer = _players.FirstOrDefault(p =>
                     !p.IsDropped &&
                     string.Equals(p.Email, _sessionEmail, StringComparison.OrdinalIgnoreCase));
+                _myPlayerId = myPlayer?.Id;
+                _alreadyRegistered = myPlayer is not null;
+            }
 
             var rounds = await RoundService.ListByTournamentAsync(_tournament.Id);
             if (rounds.Any())
             {
                 _currentRound = rounds.Last();
                 _currentMatches = [.. await RoundService.GetMatchesAsync(_currentRound.Id)];
+                if (_myPlayerId.HasValue)
+                    _myCurrentMatch = _currentMatches.FirstOrDefault(m =>
+                        m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId);
             }
         }
         _loading = false;
+    }
+
+    private async Task SubmitMatchResult()
+    {
+        if (_myCurrentMatch is null || _myPlayerId is null) return;
+        if (_submitMyScore is null || _submitOpponentScore is null
+            || _submitIWentFirst is null || _submitIWasAttacker is null) return;
+
+        _submitBusy = true;
+        _submitError = null;
+        _submitSuccess = false;
+        try
+        {
+            await RoundService.SubmitMatchResultAsync(
+                _myCurrentMatch.Id,
+                _myPlayerId.Value,
+                _submitMyScore.Value,
+                _submitOpponentScore.Value,
+                _submitIWentFirst.Value,
+                _submitIWasAttacker.Value);
+
+            // Refresh match list and standings
+            _currentMatches = [.. await RoundService.GetMatchesAsync(_currentRound!.Id)];
+            _myCurrentMatch = _currentMatches.FirstOrDefault(m =>
+                m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId);
+            _standings = [.. await StandingsService.ComputeAsync(_tournament!.Id, _tournament.ScoringSystem)];
+            _submitSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            _submitError = ex.Message;
+        }
+        finally
+        {
+            _submitBusy = false;
+        }
     }
 
     private async Task HandleRegister()

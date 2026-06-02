@@ -19,10 +19,29 @@ public interface IRoundService
     Task<IReadOnlyList<Match>> GetMatchesAsync(Guid roundId);
 
     /// <summary>
-    /// Enters both scores for a match and marks it IsScored = true.
+    /// Enters both scores (and optional role metadata) for a match, marks it IsScored = true.
     /// Scores must be non-negative integers.
     /// </summary>
-    Task EnterScoresAsync(Guid matchId, int player1Score, int player2Score);
+    Task EnterScoresAsync(
+        Guid matchId,
+        int player1Score,
+        int player2Score,
+        bool? player1IsAttacker = null,
+        bool? player1WentFirst = null);
+
+    /// <summary>
+    /// Lets a player submit the result of their own match.
+    /// <paramref name="submittingPlayerId"/> must be Player1 or Player2 of the match.
+    /// Scores are given from the submitting player's perspective:
+    /// <paramref name="myScore"/> is their score, <paramref name="opponentScore"/> is the opponent's.
+    /// </summary>
+    Task SubmitMatchResultAsync(
+        Guid matchId,
+        Guid submittingPlayerId,
+        int myScore,
+        int opponentScore,
+        bool iWentFirst,
+        bool iWasAttacker);
 
     /// <summary>
     /// Marks a round complete. All matches in the round must be scored first.

@@ -270,6 +270,7 @@ else
             ));
             _myEditToken = player.EditToken;
             _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
+            _standings = [.. await StandingsService.ComputeAsync(_tournament.Id)];
             _registrationSuccess = true;
             _myRegistrationSuccess = true;
         }

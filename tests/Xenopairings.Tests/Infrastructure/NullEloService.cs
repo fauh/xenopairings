@@ -1,5 +1,6 @@
 using Xenopairings.Models;
 using Xenopairings.Services.Elo;
+#pragma warning disable CS8619
 
 namespace Xenopairings.Tests.Infrastructure;
 
@@ -11,4 +12,7 @@ public sealed class NullEloService : IEloService
         Task.FromResult<IReadOnlyList<PlayerRating>>([]);
     public Task<PlayerRating?> GetByEmailAsync(string email) =>
         Task.FromResult<PlayerRating?>(null);
+    public Task<(PlayerRating Rating, IReadOnlyList<PlayerRatingHistory> History)?> GetProfileAsync(Guid ratingId) =>
+        Task.FromResult<(PlayerRating, IReadOnlyList<PlayerRatingHistory>)?>(null);
+    public Task SetProfileVisibilityAsync(Guid ratingId, bool isPublic) => Task.CompletedTask;
 }

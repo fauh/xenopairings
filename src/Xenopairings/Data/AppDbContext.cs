@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamMatchup> TeamMatchups => Set<TeamMatchup>();
     public DbSet<PlayerRating> PlayerRatings => Set<PlayerRating>();
+    public DbSet<PlayerRatingHistory> PlayerRatingHistories => Set<PlayerRatingHistory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -108,6 +109,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             pr.HasIndex(x => x.Email).IsUnique();
             pr.Property(x => x.Email)
                 .HasConversion(v => v.ToLowerInvariant(), v => v);
+        });
+
+        modelBuilder.Entity<PlayerRatingHistory>(h =>
+        {
+            h.HasKey(x => x.Id);
+            h.HasIndex(x => x.PlayerRatingId);
+            h.HasOne(x => x.PlayerRating)
+                .WithMany()
+                .HasForeignKey(x => x.PlayerRatingId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<TeamMatchup>(tm =>

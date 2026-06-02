@@ -15,4 +15,13 @@ public interface IEloService
 
     /// <summary>Returns the rating for a specific email, or null if they have never played.</summary>
     Task<PlayerRating?> GetByEmailAsync(string email);
+
+    /// <summary>
+    /// Returns the player's rating and full match history, ordered oldest-first.
+    /// Returns null if the rating ID does not exist.
+    /// </summary>
+    Task<(PlayerRating Rating, IReadOnlyList<PlayerRatingHistory> History)?> GetProfileAsync(Guid ratingId);
+
+    /// <summary>Toggles the IsProfilePublic flag. Caller must verify ownership.</summary>
+    Task SetProfileVisibilityAsync(Guid ratingId, bool isPublic);
 }

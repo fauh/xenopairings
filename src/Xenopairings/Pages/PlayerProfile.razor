@@ -1,0 +1,246 @@
+@page "/player/{RatingId:guid}"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Xenopairings.Models
+@using Xenopairings.Services.Elo
+@inject IEloService EloService
+@inject NavigationManager Nav
+
+<PageTitle>@(_rating?.DisplayName ?? "Player") — Xenopairings</PageTitle>
+
+@if (_loading)
+{
+    <LoadingSpinner />
+}
+else if (_rating is null)
+{
+    <div class="empty-state">
+        <div class="empty-state-icon">🎲</div>
+        <h3>Player not found</h3>
+        <a href="/leaderboard" class="btn btn-outline-secondary mt-2">Back to leaderboard</a>
+    </div>
+}
+else
+{
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+        <div>
+            <h1 class="mb-0">@_rating.DisplayName</h1>
+            <p class="text-muted small mt-1">
+                ELO: <strong>@((int)Math.Round(_rating.Rating))</strong> ·
+                @_rating.GamesPlayed game@(_rating.GamesPlayed == 1 ? "" : "s") played
+            </p>
+        </div>
+        <a href="/leaderboard" class="btn btn-outline-secondary btn-sm align-self-start">← Leaderboard</a>
+    </div>
+
+    @* ── Privacy toggle (own profile only) ───────────────────────────────────── *@
+    @if (_isOwnProfile)
+    {
+        <div class="card mb-4" style="max-width:480px">
+            <div class="card-body py-2">
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="profilePublic"
+                           checked="@_rating.IsProfilePublic"
+                           @onchange="ToggleVisibility" />
+                    <label class="form-check-label" for="profilePublic">
+                        Public profile
+                        <span class="text-muted small ms-1">
+                            @(_rating.IsProfilePublic ? "(match history visible to everyone)" : "(hidden — only your ELO shows on the leaderboard)")
+                        </span>
+                    </label>
+                </div>
+                @if (_visibilityMessage is not null)
+                {
+                    <div class="small text-success mt-1">@_visibilityMessage</div>
+                }
+            </div>
+        </div>
+    }
+
+    @* ── Private profile guard ────────────────────────────────────────────────── *@
+    @if (!_rating.IsProfilePublic && !_isOwnProfile)
+    {
+        <div class="alert alert-secondary">
+            This player has made their profile private.
+        </div>
+    }
+    else
+    {
+        @* ── ELO history ─────────────────────────────────────────────────────── *@
+        <h2 class="h5 mt-2">Match history</h2>
+        @if (!_history.Any())
+        {
+            <p class="text-muted">No rated matches yet.</p>
+        }
+        else
+        {
+            <div class="table-responsive mb-4">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Tournament</th>
+                            <th>Opponent</th>
+                            <th>Score</th>
+                            <th class="text-end">Result</th>
+                            <th class="text-end">ELO change</th>
+                            <th class="text-end">ELO after</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var h in _history.OrderByDescending(h => h.PlayedAt))
+                        {
+                            var change = h.RatingAfter - h.RatingBefore;
+                            var resultLabel = h.ActualOutcome > 0.5 ? "Win"
+                                : h.ActualOutcome < 0.5 ? "Loss"
+                                : "Draw";
+                            var resultClass = h.ActualOutcome > 0.5 ? "text-success"
+                                : h.ActualOutcome < 0.5 ? "text-danger"
+                                : "text-muted";
+                            var changeSign = change >= 0 ? "+" : "";
+                            <tr>
+                                <td>
+                                    <a href="/t/@h.TournamentSlug">@h.TournamentTitle</a>
+                                </td>
+                                <td>
+                                    @if (h.OpponentEmail is not null)
+                                    {
+                                        @* Link to opponent's profile if they have one *@
+                                        var opponentRating = _opponentProfiles.GetValueOrDefault(h.OpponentEmail);
+                                        if (opponentRating is not null)
+                                        {
+                                            <a href="/player/@opponentRating.Id">@h.OpponentName</a>
+                                        }
+                                        else
+                                        {
+                                            @(h.OpponentName ?? "—")
+                                        }
+                                    }
+                                    else
+                                    {
+                                        @(h.OpponentName ?? "—")
+                                    }
+                                </td>
+                                <td>@h.MyRawScore — @h.OpponentRawScore</td>
+                                <td class="text-end @resultClass">@resultLabel</td>
+                                <td class="text-end @(change >= 0 ? "text-success" : "text-danger")">
+                                    @changeSign@change.ToString("F1")
+                                </td>
+                                <td class="text-end">@((int)Math.Round(h.RatingAfter))</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @* ── Head-to-head ────────────────────────────────────────────────── *@
+            <h2 class="h5">Head-to-head</h2>
+            @if (!HeadToHead().Any())
+            {
+                <p class="text-muted">No head-to-head data yet.</p>
+            }
+            else
+            {
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr><th>Opponent</th><th class="text-center">Played</th><th class="text-center">W</th><th class="text-center">D</th><th class="text-center">L</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in HeadToHead())
+                            {
+                                <tr>
+                                    <td>
+                                        @if (row.Rating is not null)
+                                        {
+                                            <a href="/player/@row.Rating.Id">@row.Name</a>
+                                        }
+                                        else
+                                        {
+                                            @row.Name
+                                        }
+                                    </td>
+                                    <td class="text-center">@row.Played</td>
+                                    <td class="text-center text-success">@row.Wins</td>
+                                    <td class="text-center text-muted">@row.Draws</td>
+                                    <td class="text-center text-danger">@row.Losses</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+    }
+}
+
+@code {
+    [Parameter] public Guid RatingId { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private PlayerRating? _rating;
+    private IReadOnlyList<PlayerRatingHistory> _history = [];
+    private Dictionary<string, PlayerRating> _opponentProfiles = [];
+    private bool _loading = true;
+    private bool _isOwnProfile;
+    private string? _visibilityMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateTask;
+        var myEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+
+        var result = await EloService.GetProfileAsync(RatingId);
+        if (result is not null)
+        {
+            _rating = result.Value.Rating;
+            _history = result.Value.History;
+            _isOwnProfile = myEmail is not null &&
+                string.Equals(myEmail, _rating.Email, StringComparison.OrdinalIgnoreCase);
+
+            // Load opponent ratings so we can link to their profiles
+            var opponentEmails = _history
+                .Where(h => !string.IsNullOrWhiteSpace(h.OpponentEmail))
+                .Select(h => h.OpponentEmail!)
+                .Distinct()
+                .ToList();
+            foreach (var email in opponentEmails)
+            {
+                var opp = await EloService.GetByEmailAsync(email);
+                if (opp is not null)
+                    _opponentProfiles[email] = opp;
+            }
+        }
+        _loading = false;
+    }
+
+    private IEnumerable<(string Name, string? OpponentEmail, PlayerRating? Rating, int Played, int Wins, int Draws, int Losses)> HeadToHead() =>
+        _history
+            .Where(h => h.OpponentName is not null)
+            .GroupBy(h => h.OpponentEmail ?? h.OpponentName ?? "")
+            .Select(g =>
+            {
+                var entries = g.ToList();
+                var opponentRating = g.Key is not null
+                    ? _opponentProfiles.GetValueOrDefault(g.Key)
+                    : null;
+                return (
+                    Name:          entries.Last().OpponentName ?? "—",
+                    OpponentEmail: (string?)g.Key,
+                    Rating:        opponentRating,
+                    Played:        entries.Count,
+                    Wins:          entries.Count(h => h.ActualOutcome > 0.5),
+                    Draws:         entries.Count(h => h.ActualOutcome == 0.5),
+                    Losses:        entries.Count(h => h.ActualOutcome < 0.5)
+                );
+            })
+            .OrderByDescending(x => x.Played);
+
+    private async Task ToggleVisibility()
+    {
+        if (_rating is null) return;
+        var newValue = !_rating.IsProfilePublic;
+        await EloService.SetProfileVisibilityAsync(_rating.Id, newValue);
+        _rating.IsProfilePublic = newValue;
+        _visibilityMessage = newValue ? "Profile is now public." : "Profile is now hidden.";
+    }
+}

@@ -18,4 +18,9 @@ public class PlayerRating
     public int GamesPlayed { get; set; }
     public DateTimeOffset LastUpdated { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+    /// <summary>
+    /// When false the profile page shows "Profile hidden" and no match history is visible.
+    /// The player still appears on the leaderboard with their rating.
+    /// </summary>
+    public bool IsProfilePublic { get; set; } = true;
 }

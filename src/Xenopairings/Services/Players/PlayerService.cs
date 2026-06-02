@@ -40,7 +40,7 @@ public class PlayerService(
     {
         var players = await db.Players
             .Where(p => p.TournamentId == tournamentId)
-            .OrderBy(p => p.RegisteredAt)
+            .OrderBy(p => p.RegisteredAt.UtcTicks)
             .ToListAsync();
         return [.. players];
     }

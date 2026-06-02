@@ -9,6 +9,8 @@ public interface ITournamentService
     Task<Tournament?> GetBySlugAsync(string slug);
     Task<Tournament?> GetByManageTokenAsync(string token);
     Task SetRegistrationOpenAsync(Guid tournamentId, bool open);
+    /// <summary>Returns all non-private tournaments, newest first.</summary>
+    Task<IReadOnlyList<Tournament>> ListPublicAsync();
 }
 
 public record CreateTournamentRequest(

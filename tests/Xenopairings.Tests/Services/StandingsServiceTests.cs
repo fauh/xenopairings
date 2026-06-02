@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Xenopairings.Models;
+using Xenopairings.Services.Email;
 using Xenopairings.Services.Rounds;
 using Xenopairings.Services.Standings;
 using Xenopairings.Tests.Infrastructure;
@@ -18,7 +20,11 @@ public class StandingsServiceTests : IClassFixture<InMemoryDatabaseFixture>
     private RoundService BuildRoundSvc()
     {
         var ctx = _db.CreateDbContext();
-        return new RoundService(ctx, new StandingsService(ctx), new TeamStandingsService(ctx), NullLogger<RoundService>.Instance);
+        return new RoundService(
+            ctx, new StandingsService(ctx), new TeamStandingsService(ctx),
+            new NullEmailSender(),
+            Options.Create(new EmailSettings { BaseUrl = "https://test.example" }),
+            NullLogger<RoundService>.Instance);
     }
 
     private async Task<(Guid tid, Guid p1, Guid p2)> SeedTwoPlayerTournamentAsync()

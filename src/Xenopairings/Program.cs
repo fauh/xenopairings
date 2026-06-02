@@ -142,6 +142,7 @@ builder.Services.AddScoped<IPlayerService, PlayerService>();
 builder.Services.AddScoped<StandingsService>();
 builder.Services.AddScoped<TeamStandingsService>();
 builder.Services.AddScoped<IRoundService, RoundService>();
+// RoundService takes IEmailSender + IOptions<EmailSettings> — already registered above
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();

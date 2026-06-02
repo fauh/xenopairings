@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Xenopairings.Data;
 using Xenopairings.Models;
+using Xenopairings.Services.Email;
 using Xenopairings.Services.Pairings;
 using Xenopairings.Services.Standings;
 
@@ -10,6 +12,8 @@ public sealed class RoundService(
     AppDbContext db,
     StandingsService standingsService,
     TeamStandingsService teamStandingsService,
+    IEmailSender emailSender,
+    IOptions<EmailSettings> emailSettings,
     ILogger<RoundService> logger) : IRoundService
 {
     public async Task<Round> CreateWithPairingsAsync(Guid tournamentId, string? missionLayout)
@@ -80,7 +84,37 @@ public sealed class RoundService(
         logger.LogInformation(
             "Created individual round {RoundNumber} for tournament {TournamentId}.",
             roundNumber, tournament.Id);
+
+        // Send round notification emails (fire-and-forget — don't fail round creation on email error)
+        _ = Task.Run(() => SendIndividualRoundEmailsAsync(tournament, round, pairings));
+
         return round;
+    }
+
+    private async Task SendIndividualRoundEmailsAsync(
+        Tournament tournament,
+        Round round,
+        IReadOnlyList<(Player p1, Player? p2, int table)> pairings)
+    {
+        var baseUrl = emailSettings.Value.BaseUrl.TrimEnd('/');
+        var tournamentUrl = $"{baseUrl}/t/{tournament.Slug}";
+        var missionText = string.IsNullOrWhiteSpace(round.MissionLayout)
+            ? "" : $"\nMission: {round.MissionLayout}";
+
+        foreach (var (p1, p2, table) in pairings)
+        {
+            if (!string.IsNullOrWhiteSpace(p1.Email))
+            {
+                var opponent = p2 is null ? "— (bye)" : p2.Name;
+                await SendRoundEmailSafe(p1.Email, p1.Name, tournament.Title,
+                    round.RoundNumber, table, opponent, missionText, tournamentUrl);
+            }
+            if (p2 is not null && !string.IsNullOrWhiteSpace(p2.Email))
+            {
+                await SendRoundEmailSafe(p2.Email, p2.Name, tournament.Title,
+                    round.RoundNumber, table, p1.Name, missionText, tournamentUrl);
+            }
+        }
     }
 
     // ── Team round ────────────────────────────────────────────────────────────
@@ -146,7 +180,102 @@ public sealed class RoundService(
         logger.LogInformation(
             "Created team round {RoundNumber} for tournament {TournamentId} with {MatchupCount} team matchups.",
             roundNumber, tournament.Id, pairings.Count);
+
+        _ = Task.Run(() => SendTeamRoundEmailsAsync(tournament, round, pairings, teamSize));
+
         return round;
+    }
+
+    private async Task SendTeamRoundEmailsAsync(
+        Tournament tournament,
+        Round round,
+        IReadOnlyList<(Team t1, Team? t2, int tableGroupStart)> pairings,
+        int teamSize)
+    {
+        var baseUrl = emailSettings.Value.BaseUrl.TrimEnd('/');
+        var tournamentUrl = $"{baseUrl}/t/{tournament.Slug}";
+        var missionText = string.IsNullOrWhiteSpace(round.MissionLayout)
+            ? "" : $"\nMission: {round.MissionLayout}";
+
+        foreach (var (t1, t2, tableGroupStart) in pairings)
+        {
+            var t1Name = t1.Name;
+            var t2Name = t2?.Name ?? "— (bye)";
+            var tables = teamSize > 1
+                ? $"Tables {tableGroupStart}–{tableGroupStart + teamSize - 1}"
+                : $"Table {tableGroupStart}";
+
+            foreach (var player in t1.Players.Where(p => !p.IsDropped && !string.IsNullOrWhiteSpace(p.Email)))
+            {
+                await SendTeamRoundEmailSafe(player.Email!, player.Name, tournament.Title,
+                    round.RoundNumber, t1Name, t2Name, tables, missionText, tournamentUrl);
+            }
+            if (t2 is not null)
+            {
+                foreach (var player in t2.Players.Where(p => !p.IsDropped && !string.IsNullOrWhiteSpace(p.Email)))
+                {
+                    await SendTeamRoundEmailSafe(player.Email!, player.Name, tournament.Title,
+                        round.RoundNumber, t2.Name, t1Name, tables, missionText, tournamentUrl);
+                }
+            }
+        }
+    }
+
+    // ── Email helpers ─────────────────────────────────────────────────────────
+
+    private async Task SendRoundEmailSafe(
+        string email, string playerName, string tournamentTitle,
+        int roundNumber, int table, string opponentName,
+        string missionText, string tournamentUrl)
+    {
+        try
+        {
+            var subject = $"Round {roundNumber} is ready — {tournamentTitle}";
+            var body = $"""
+                Hi {playerName},
+
+                Round {roundNumber} of {tournamentTitle} has been paired!
+
+                Your match:
+                  Table:    {table}
+                  Opponent: {opponentName}{missionText}
+
+                View pairings and submit your result:
+                {tournamentUrl}
+                """;
+            await emailSender.SendAsync(email, subject, body);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send round notification to {Email}.", email);
+        }
+    }
+
+    private async Task SendTeamRoundEmailSafe(
+        string email, string playerName, string tournamentTitle,
+        int roundNumber, string yourTeam, string opponentTeam,
+        string tables, string missionText, string tournamentUrl)
+    {
+        try
+        {
+            var subject = $"Round {roundNumber} is ready — {tournamentTitle}";
+            var body = $"""
+                Hi {playerName},
+
+                Round {roundNumber} of {tournamentTitle} has been paired!
+
+                Your team {yourTeam} faces {opponentTeam}
+                  {tables}{missionText}
+
+                View pairings at:
+                {tournamentUrl}
+                """;
+            await emailSender.SendAsync(email, subject, body);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send team round notification to {Email}.", email);
+        }
     }
 
     // ── Shared helpers ────────────────────────────────────────────────────────

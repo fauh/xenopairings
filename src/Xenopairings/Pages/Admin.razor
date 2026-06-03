@@ -75,46 +75,35 @@ else
     }
 
     @* ── Tournaments ─────────────────────────────────────────────────────────── *@
-    <h2 class="h5">All tournaments (@_tournaments.Count)</h2>
-    <div class="table-responsive mb-4">
-        <table class="table table-sm">
-            <thead>
-                <tr>
-                    <th>Title</th>
-                    <th>Organizer</th>
-                    <th>Date</th>
-                    <th>Status</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var t in _tournaments)
-                {
-                    var (label, css) = t.Status switch
-                    {
-                        TournamentStatus.InProgress => ("In Progress", "text-bg-primary"),
-                        TournamentStatus.Ended      => ("Ended",       "text-bg-secondary"),
-                        _ when t.RegistrationOpen   => ("Reg. Open",   "text-bg-success"),
-                        _                           => ("Reg. Closed", "text-bg-warning"),
-                    };
-                    <tr>
-                        <td>
-                            <a href="/t/@t.Slug">@t.Title</a>
-                            @if (t.IsPrivate) { <span class="badge text-bg-secondary ms-1 small">private</span> }
-                        </td>
-                        <td class="text-muted small">@t.OrganizerEmail</td>
-                        <td class="text-muted small text-nowrap">
-                            @t.StartsAt.ToLocalTime().ToString("d MMM yyyy")
-                        </td>
-                        <td><span class="badge @css">@label</span></td>
-                        <td>
-                            <a href="/t/@t.Slug/manage" class="btn btn-sm btn-outline-primary">Manage</a>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
+    @* Active / Ongoing *@
+    @if (Ongoing().Any())
+    {
+        <h2 class="h5">Active / Ongoing (@Ongoing().Count)</h2>
+        @TournamentTable(Ongoing())
+    }
+
+    @* Upcoming *@
+    @if (Upcoming().Any())
+    {
+        <h2 class="h5 @(Ongoing().Any() ? "mt-3" : "")">Upcoming (@Upcoming().Count)</h2>
+        @TournamentTable(Upcoming())
+    }
+
+    @if (!Ongoing().Any() && !Upcoming().Any())
+    {
+        <p class="text-muted small mb-3">No active or upcoming tournaments.</p>
+    }
+
+    @* Past *@
+    @if (Past().Any())
+    {
+        <details class="mb-4">
+            <summary class="text-muted mb-2" style="cursor:pointer">
+                Past tournaments (@Past().Count)
+            </summary>
+            <div class="mt-2">@TournamentTable(Past())</div>
+        </details>
+    }
     @* ── Organizations ─────────────────────────────────────────────────────── *@
     <h2 class="h5 mt-2">All organizations (@_orgs.Count)</h2>
     @if (!_orgs.Any())
@@ -192,6 +181,82 @@ else
         _statusMsg = "Organization deleted.";
         _saving = false;
     }
+
+    private List<Tournament> Ongoing()  => [.. _tournaments.Where(t => t.Status == TournamentStatus.InProgress).OrderBy(t => t.StartsAt)];
+    private List<Tournament> Upcoming() => [.. _tournaments.Where(t => t.Status == TournamentStatus.Upcoming).OrderBy(t => t.StartsAt)];
+    private List<Tournament> Past()     => [.. _tournaments.Where(t => t.Status == TournamentStatus.Ended).OrderByDescending(t => t.StartsAt)];
+
+    private static RenderFragment TournamentTable(List<Tournament> list) => __builder =>
+    {
+        __builder.OpenElement(0, "div");
+        __builder.AddAttribute(1, "class", "table-responsive mb-4");
+        __builder.OpenElement(2, "table");
+        __builder.AddAttribute(3, "class", "table table-sm");
+        __builder.OpenElement(4, "thead");
+        __builder.OpenElement(5, "tr");
+        foreach (var h in new[] { "Title", "Organizer", "Date", "Status", "" })
+        {
+            __builder.OpenElement(6, "th"); __builder.AddContent(7, h); __builder.CloseElement();
+        }
+        __builder.CloseElement(); // tr
+        __builder.CloseElement(); // thead
+        __builder.OpenElement(8, "tbody");
+        var seq = 9;
+        foreach (var t in list)
+        {
+            var (label, css) = t.Status switch
+            {
+                TournamentStatus.InProgress => ("In Progress", "text-bg-primary"),
+                TournamentStatus.Ended      => ("Ended",       "text-bg-secondary"),
+                _ when t.RegistrationOpen   => ("Reg. Open",   "text-bg-success"),
+                _                           => ("Reg. Closed", "text-bg-warning"),
+            };
+            __builder.OpenElement(seq++, "tr");
+            // Title
+            __builder.OpenElement(seq++, "td");
+            __builder.OpenElement(seq++, "a");
+            __builder.AddAttribute(seq++, "href", $"/t/{t.Slug}");
+            __builder.AddContent(seq++, t.Title);
+            __builder.CloseElement();
+            if (t.IsPrivate)
+            {
+                __builder.OpenElement(seq++, "span");
+                __builder.AddAttribute(seq++, "class", "badge text-bg-secondary ms-1 small");
+                __builder.AddContent(seq++, "private");
+                __builder.CloseElement();
+            }
+            __builder.CloseElement(); // td title
+            // Organizer
+            __builder.OpenElement(seq++, "td");
+            __builder.AddAttribute(seq++, "class", "text-muted small");
+            __builder.AddContent(seq++, t.OrganizerEmail);
+            __builder.CloseElement();
+            // Date
+            __builder.OpenElement(seq++, "td");
+            __builder.AddAttribute(seq++, "class", "text-muted small text-nowrap");
+            __builder.AddContent(seq++, t.StartsAt.ToLocalTime().ToString("d MMM yyyy"));
+            __builder.CloseElement();
+            // Badge
+            __builder.OpenElement(seq++, "td");
+            __builder.OpenElement(seq++, "span");
+            __builder.AddAttribute(seq++, "class", $"badge {css}");
+            __builder.AddContent(seq++, label);
+            __builder.CloseElement();
+            __builder.CloseElement();
+            // Action
+            __builder.OpenElement(seq++, "td");
+            __builder.OpenElement(seq++, "a");
+            __builder.AddAttribute(seq++, "href", $"/t/{t.Slug}/manage");
+            __builder.AddAttribute(seq++, "class", "btn btn-sm btn-outline-primary");
+            __builder.AddContent(seq++, "Manage");
+            __builder.CloseElement();
+            __builder.CloseElement();
+            __builder.CloseElement(); // tr
+        }
+        __builder.CloseElement(); // tbody
+        __builder.CloseElement(); // table
+        __builder.CloseElement(); // div
+    };
 
     private async Task ToggleVip(User user)
     {

@@ -1,0 +1,163 @@
+@page "/feedback"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Xenopairings.Services.GitHub
+@inject GitHubIssueService GitHubIssueService
+@inject NavigationManager Nav
+
+<PageTitle>Feedback — Xenopairings</PageTitle>
+
+<div style="max-width:600px">
+    <h1>Feedback</h1>
+    <p class="text-muted">
+        Report a bug or suggest a feature. Your submission creates a public issue in the
+        <a href="https://github.com/fauh/xenopairings" target="_blank" rel="noopener">
+            Xenopairings GitHub repository
+        </a>.
+    </p>
+
+    @if (_submitted)
+    {
+        <div class="alert alert-success">
+            <strong>Thanks!</strong> Your feedback has been submitted.
+            @if (_issueUrl is not null)
+            {
+                <span> <a href="@_issueUrl" target="_blank" rel="noopener">View the issue →</a></span>
+            }
+        </div>
+        <a href="/" class="btn btn-outline-secondary mt-2">Back to home</a>
+    }
+    else
+    {
+        <div class="mb-3">
+            <label class="form-label fw-semibold">Type</label>
+            <div class="d-flex gap-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" id="type-bug"
+                           name="type" value="bug"
+                           checked="@(_type == "bug")"
+                           @onchange="() => _type = BugLabel" />
+                    <label class="form-check-label" for="type-bug">🐛 Bug report</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" id="type-feature"
+                           name="type" value="feature"
+                           checked="@(_type == "feature")"
+                           @onchange="() => _type = FeatureLabel" />
+                    <label class="form-check-label" for="type-feature">✨ Feature request</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="title">
+                Title <span class="text-danger">*</span>
+            </label>
+            <input id="title" class="form-control" @bind="_title" maxlength="200"
+                   placeholder="@(_type == "bug" ? "What went wrong?" : "What would you like?")" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="description">
+                Description <span class="text-danger">*</span>
+            </label>
+            <textarea id="description" class="form-control" rows="6" @bind="_description"
+                      placeholder="@(_type == "bug"
+                          ? "Steps to reproduce, what you expected vs what happened."
+                          : "Describe the feature and why it would be useful.")"></textarea>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="contact">
+                Your email <span class="text-muted">(optional — if you want a follow-up)</span>
+            </label>
+            <input id="contact" class="form-control" type="email" @bind="_contact"
+                   maxlength="200" />
+        </div>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="alert alert-danger py-2">@_error</div>
+        }
+
+        <button class="btn btn-primary" @onclick="Submit"
+                disabled="@(string.IsNullOrWhiteSpace(_title) || string.IsNullOrWhiteSpace(_description) || _submitting)">
+            @(_submitting ? "Submitting…" : "Submit feedback")
+        </button>
+        <a href="/" class="btn btn-outline-secondary ms-2">Cancel</a>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private const string BugLabel = "bug";
+    private const string FeatureLabel = "feature";
+    private string _type = BugLabel;
+    private string _title = string.Empty;
+    private string _description = string.Empty;
+    private string _contact = string.Empty;
+
+    private bool _submitting;
+    private bool _submitted;
+    private string? _issueUrl;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Pre-fill contact email if logged in
+        var authState = await AuthStateTask;
+        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+        if (!string.IsNullOrWhiteSpace(email)) _contact = email;
+    }
+
+    private async Task Submit()
+    {
+        _submitting = true;
+        _error = null;
+        try
+        {
+            var isBug = _type == "bug";
+            var issueTitle = $"{(isBug ? "[Bug]" : "[Feature]")} {_title.Trim()}";
+
+            var contactLine = string.IsNullOrWhiteSpace(_contact)
+                ? "*(not provided)*"
+                : _contact.Trim();
+
+            var body = $"""
+                **Type:** {(isBug ? "Bug report 🐛" : "Feature request ✨")}
+                **Reporter:** {contactLine}
+
+                ---
+
+                {_description.Trim()}
+
+                ---
+                *Submitted via Xenopairings in-app feedback*
+                """;
+
+            var labels = isBug
+                ? new[] { "bug", "user-submitted" }
+                : new[] { "enhancement", "user-submitted" };
+
+            _issueUrl = await GitHubIssueService.CreateIssueAsync(issueTitle, body, labels);
+
+            if (_issueUrl is null)
+            {
+                // Service not configured or API error — still show success to user
+                _error = null;
+            }
+
+            _submitted = true;
+        }
+        catch (Exception ex)
+        {
+            _error = "Something went wrong. Please try again or open an issue directly on GitHub.";
+            _ = ex;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

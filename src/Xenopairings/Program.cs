@@ -12,6 +12,7 @@ using Xenopairings.Data;
 using Xenopairings.Models;
 using Xenopairings.Services;
 using Xenopairings.Services.Auth;
+using Xenopairings.Services.GitHub;
 using Xenopairings.Services.Organizations;
 using Xenopairings.Services.Backups;
 using Xenopairings.Services.Elo;
@@ -149,6 +150,11 @@ builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.Configure<AdminSettings>(
     builder.Configuration.GetSection(AdminSettings.SectionName));
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+// ── GitHub issue service ──────────────────────────────────────────────────────
+builder.Services.Configure<GitHubSettings>(
+    builder.Configuration.GetSection(GitHubSettings.SectionName));
+builder.Services.AddHttpClient<GitHubIssueService>();
 builder.Services.AddScoped<IOrganizationService, OrganizationService>();
 builder.Services.AddScoped<IEloService, EloService>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();

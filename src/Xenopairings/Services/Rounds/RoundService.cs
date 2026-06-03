@@ -44,13 +44,14 @@ public sealed class RoundService(
         Tournament tournament, int roundNumber, string? missionLayout)
     {
         var activePlayers = await db.Players
-            .Where(p => p.TournamentId == tournament.Id && !p.IsDropped)
+            .Where(p => p.TournamentId == tournament.Id && !p.IsDropped
+                        && (!tournament.CheckInEnabled || p.IsCheckedIn))
             .ToListAsync();
 
         if (activePlayers.Count == 0)
             throw new InvalidOperationException("Cannot create a round with no active players.");
 
-        var standings = await standingsService.ComputeAsync(tournament.Id, tournament.ScoringSystem);
+        var standings = await standingsService.ComputeAsync(tournament.Id, tournament.ScoringSystem, tournament.Tiebreakers);
 
         var previousPairs = await db.Matches
             .Include(m => m.Round)
@@ -275,7 +276,7 @@ public sealed class RoundService(
             var activePlayers = await db.Players
                 .Where(p => p.TournamentId == tournament.Id && !p.IsDropped)
                 .ToListAsync();
-            var standings = await standingsService.ComputeAsync(tournament.Id, tournament.ScoringSystem);
+            var standings = await standingsService.ComputeAsync(tournament.Id, tournament.ScoringSystem, tournament.Tiebreakers);
             var previousPairs = await db.Matches
                 .Include(m => m.Round)
                 .Where(m => m.Round.TournamentId == tournament.Id
@@ -522,6 +523,24 @@ public sealed class RoundService(
     }
 
     // ── Score entry ───────────────────────────────────────────────────────────
+
+    public async Task SetSportsRatingAsync(Guid matchId, Guid submittingPlayerId, int rating)
+    {
+        if (rating < 1 || rating > 5)
+            throw new ArgumentOutOfRangeException(nameof(rating), "Sportsmanship rating must be 1–5.");
+
+        var match = await db.Matches.FindAsync(matchId)
+            ?? throw new InvalidOperationException("Match not found.");
+
+        if (match.Player1Id == submittingPlayerId)
+            match.Player1SportsRating = rating;
+        else if (match.Player2Id == submittingPlayerId)
+            match.Player2SportsRating = rating;
+        else
+            throw new InvalidOperationException("You are not a participant in this match.");
+
+        await db.SaveChangesAsync();
+    }
 
     public async Task UpdateScoreAsync(
         Guid matchId,

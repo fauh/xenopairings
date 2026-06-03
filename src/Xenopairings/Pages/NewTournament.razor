@@ -103,6 +103,63 @@ else
         </div>
     }
 
+    @* ── Tiebreakers (drag-and-drop ordered) ────────────────────────────────── *@
+    <div class="mb-3">
+        <label class="form-label">Tiebreakers <span class="text-muted small">(drag to reorder; uncheck to remove)</span></label>
+        <ul class="list-group" style="max-width:420px">
+            @foreach (var tb in model.ActiveTiebreakers)
+            {
+                <li class="list-group-item d-flex align-items-center gap-2 py-2"
+                    draggable="true"
+                    @ondragstart="() => _dragTb = tb"
+                    @ondragover:preventDefault
+                    @ondrop="() => DropTiebreaker(tb)"
+                    style="cursor:grab">
+                    <span class="text-muted">≡</span>
+                    <span class="flex-grow-1 small">@TiebreakerLabel(tb)</span>
+                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1"
+                            @onclick="() => RemoveTiebreaker(tb)">✕</button>
+                </li>
+            }
+        </ul>
+        @{
+            var available = model.AvailableTiebreakers.Except(model.ActiveTiebreakers).ToList();
+        }
+        @if (available.Any())
+        {
+            <div class="mt-2 d-flex flex-wrap gap-1">
+                @foreach (var tb in available)
+                {
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            @onclick="() => AddTiebreaker(tb)">
+                        + @TiebreakerLabel(tb)
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
+    @* ── Top cut ──────────────────────────────────────────────────────────────── *@
+    <div class="mb-3">
+        <label class="form-label" for="topCutSize">Top cut</label>
+        <select id="topCutSize" class="form-select" style="max-width:160px"
+                @onchange="e => model.TopCutSize = e.Value is string s && int.TryParse(s, out var n) && n > 0 ? n : null">
+            <option value="0" selected="@(model.TopCutSize is null)">None</option>
+            @foreach (var size in new[] { 4, 8, 16, 32 })
+            {
+                <option value="@size" selected="@(model.TopCutSize == size)">Top @size</option>
+            }
+        </select>
+        <div class="form-text">Single-elimination bracket after Swiss rounds.</div>
+    </div>
+
+    @* ── Check-in ─────────────────────────────────────────────────────────────── *@
+    <div class="mb-3 form-check">
+        <InputCheckbox id="checkInEnabled" class="form-check-input" @bind-Value="model.CheckInEnabled" />
+        <label class="form-check-label" for="checkInEnabled">Require player check-in</label>
+        <div class="form-text">Only checked-in players are included in round 1 pairings.</div>
+    </div>
+
     <div class="mb-3 form-check">
         <InputCheckbox id="isPrivate" class="form-check-input" @bind-Value="model.IsPrivate" />
         <label class="form-check-label" for="isPrivate">Private tournament (link-only)</label>
@@ -156,6 +213,34 @@ else
         StateHasChanged();
     }
 
+    // ── Tiebreaker drag-and-drop ──────────────────────────────────────────────
+    private TiebreakerType? _dragTb;
+
+    private void DropTiebreaker(TiebreakerType target)
+    {
+        if (_dragTb is null || _dragTb == target) return;
+        var list = model.ActiveTiebreakers;
+        var fromIdx = list.IndexOf(_dragTb.Value);
+        var toIdx   = list.IndexOf(target);
+        if (fromIdx < 0 || toIdx < 0) return;
+        list.RemoveAt(fromIdx);
+        list.Insert(toIdx, _dragTb.Value);
+        _dragTb = null;
+    }
+
+    private void RemoveTiebreaker(TiebreakerType tb) => model.ActiveTiebreakers.Remove(tb);
+    private void AddTiebreaker(TiebreakerType tb)    => model.ActiveTiebreakers.Add(tb);
+
+    private static string TiebreakerLabel(TiebreakerType tb) => tb switch
+    {
+        TiebreakerType.Points                     => "Points (total BPs)",
+        TiebreakerType.StrengthOfSchedule         => "Strength of Schedule",
+        TiebreakerType.ExtendedStrengthOfSchedule => "Extended SOS",
+        TiebreakerType.HeadToHead                 => "Head-to-Head",
+        TiebreakerType.Random                     => "Random",
+        _                                          => tb.ToString(),
+    };
+
     private async Task HandleSubmit()
     {
         if (_email is null) return;
@@ -176,7 +261,10 @@ else
                 RegistrationOpen: model.RegistrationOpen,
                 ScoringSystem: model.ScoringSystem,
                 IsTeamEvent: model.IsTeamEvent,
-                TeamSize: model.IsTeamEvent ? model.TeamSize : null
+                TeamSize: model.IsTeamEvent ? model.TeamSize : null,
+                TiebreakersJson: model.TiebreakersJson,
+                TopCutSize: model.TopCutSize,
+                CheckInEnabled: model.CheckInEnabled
             ));
             Nav.NavigateTo($"/created/{tournament.Id}");
         }
@@ -216,5 +304,17 @@ else
         public int TeamSize { get; set; } = 3;
         public bool IsPrivate { get; set; }
         public bool RegistrationOpen { get; set; } = true;
+
+        // Phase 3b
+        public List<TiebreakerType> ActiveTiebreakers { get; set; } =
+            [TiebreakerType.Points, TiebreakerType.StrengthOfSchedule, TiebreakerType.Random];
+        public IReadOnlyList<TiebreakerType> AvailableTiebreakers { get; } =
+            [TiebreakerType.Points, TiebreakerType.StrengthOfSchedule,
+             TiebreakerType.ExtendedStrengthOfSchedule, TiebreakerType.HeadToHead, TiebreakerType.Random];
+        public int? TopCutSize { get; set; }
+        public bool CheckInEnabled { get; set; }
+
+        public string TiebreakersJson =>
+            Tournament.SerializeTiebreakers(ActiveTiebreakers);
     }
 }

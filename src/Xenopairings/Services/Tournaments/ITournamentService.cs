@@ -10,6 +10,7 @@ public interface ITournamentService
     Task<Tournament?> GetByManageTokenAsync(string token);
     Task SetRegistrationOpenAsync(Guid tournamentId, bool open);
     Task SetArmyListLockedAsync(Guid tournamentId, bool locked);
+    Task SetCheckInEnabledAsync(Guid tournamentId, bool enabled);
     /// <summary>Transitions Upcoming → InProgress; auto-closes registration.</summary>
     Task StartAsync(Guid tournamentId);
     /// <summary>Transitions any non-Ended status → Ended; auto-closes registration.</summary>
@@ -35,5 +36,8 @@ public record CreateTournamentRequest(
     bool RegistrationOpen = true,
     ScoringSystem ScoringSystem = ScoringSystem.Gw,
     bool IsTeamEvent = false,
-    int? TeamSize = null
+    int? TeamSize = null,
+    string TiebreakersJson = "[\"Points\",\"StrengthOfSchedule\",\"Random\"]",
+    int? TopCutSize = null,
+    bool CheckInEnabled = false
 );

@@ -17,4 +17,6 @@ public class Player
     /// <summary>The organization the player chose to represent in this tournament. Null = none.</summary>
     public Guid? OrganizationId { get; set; }
     public Organization? Organization { get; set; }
+    /// <summary>True when the player has checked in for the event. Only relevant when Tournament.CheckInEnabled is true.</summary>
+    public bool IsCheckedIn { get; set; }
 }

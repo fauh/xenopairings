@@ -16,6 +16,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<OrganizationMember> OrganizationMembers => Set<OrganizationMember>();
     public DbSet<PlayerRating> PlayerRatings => Set<PlayerRating>();
     public DbSet<PlayerRatingHistory> PlayerRatingHistories => Set<PlayerRatingHistory>();
+    public DbSet<PlayerReport> PlayerReports => Set<PlayerReport>();
+    public DbSet<TopCutMatch> TopCutMatches => Set<TopCutMatch>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -167,6 +169,45 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany()
                 .HasForeignKey(x => x.Team2Id)
                 .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired(false);
+        });
+
+        modelBuilder.Entity<PlayerReport>(r =>
+        {
+            r.HasKey(x => x.Id);
+            r.HasIndex(x => x.TournamentId);
+            r.HasOne(x => x.Tournament)
+                .WithMany()
+                .HasForeignKey(x => x.TournamentId)
+                .OnDelete(DeleteBehavior.Cascade);
+            r.HasOne(x => x.ReporterPlayer)
+                .WithMany()
+                .HasForeignKey(x => x.ReporterPlayerId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .IsRequired(false);
+            r.HasOne(x => x.ReportedPlayer)
+                .WithMany()
+                .HasForeignKey(x => x.ReportedPlayerId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TopCutMatch>(tc =>
+        {
+            tc.HasKey(x => x.Id);
+            tc.HasIndex(x => x.TournamentId);
+            tc.HasOne(x => x.Tournament)
+                .WithMany()
+                .HasForeignKey(x => x.TournamentId)
+                .OnDelete(DeleteBehavior.Cascade);
+            tc.HasOne(x => x.Player1)
+                .WithMany()
+                .HasForeignKey(x => x.Player1Id)
+                .OnDelete(DeleteBehavior.SetNull)
+                .IsRequired(false);
+            tc.HasOne(x => x.Player2)
+                .WithMany()
+                .HasForeignKey(x => x.Player2Id)
+                .OnDelete(DeleteBehavior.SetNull)
                 .IsRequired(false);
         });
     }

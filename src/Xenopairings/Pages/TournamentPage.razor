@@ -10,6 +10,7 @@
 @using Xenopairings.Services.Elo
 @using Xenopairings.Services.Auth
 @using Xenopairings.Services.Organizations
+@using Xenopairings.Services.Reports
 @inject ITournamentService TournamentService
 @inject IPlayerService PlayerService
 @inject IRoundService RoundService
@@ -17,6 +18,7 @@
 @inject IEloService EloService
 @inject IAuthService AuthService
 @inject IOrganizationService OrgService
+@inject IPlayerReportService PlayerReportService
 @inject NavigationManager Nav
 
 <PageTitle>@(_tournament?.Title ?? "Tournament") — Xenopairings</PageTitle>
@@ -322,6 +324,64 @@ else
         </div>
     }
 
+    @* ── Check-in ──────────────────────────────────────────────────────────────── *@
+    @if (_tournament.CheckInEnabled && _myPlayerId.HasValue &&
+         (_tournament.Status == TournamentStatus.Upcoming || _tournament.Status == TournamentStatus.InProgress))
+    {
+        var myPlayer = _players.FirstOrDefault(p => p.Id == _myPlayerId);
+        @if (myPlayer is not null)
+        {
+            <div class="mb-4">
+                @if (myPlayer.IsCheckedIn)
+                {
+                    <span class="badge text-bg-success fs-6">✓ Checked in</span>
+                }
+                else
+                {
+                    <button class="btn btn-success" @onclick="CheckIn" disabled="@_checkInBusy">
+                        @(_checkInBusy ? "Checking in…" : "Check in to this tournament")
+                    </button>
+                }
+            </div>
+        }
+    }
+
+    @* ── Sportsmanship ratings ──────────────────────────────────────────────────── *@
+    @if (_myPlayerId.HasValue && _ratedMatches.Any(x => !RatingGiven(x.match)))
+    {
+        <div class="card mb-4" style="max-width:500px">
+            <div class="card-body">
+                <h2 class="h6 card-title mb-3">Rate your opponents</h2>
+                @foreach (var (rn, match) in _ratedMatches.Where(x => !RatingGiven(x.match)))
+                {
+                    var opp = match.Player1Id == _myPlayerId ? match.Player2 : match.Player1;
+                    <div class="mb-3">
+                        <div class="small text-muted mb-1">R@(rn) — vs @(opp?.Name ?? "opponent")</div>
+                        <div class="d-flex gap-1">
+                            @for (var star = 1; star <= 5; star++)
+                            {
+                                var s = star;
+                                <button class="btn btn-sm btn-outline-warning px-2"
+                                        @onclick="() => SubmitSportsRating(match.Id, s)"
+                                        disabled="@_sportsRatingBusy">
+                                    @(s <= (_pendingSportsRating.GetValueOrDefault(match.Id)) ? "★" : "☆")
+                                </button>
+                            }
+                            @if (_pendingSportsRating.ContainsKey(match.Id))
+                            {
+                                <button class="btn btn-sm btn-primary ms-2"
+                                        @onclick="() => SaveSportsRating(match.Id)"
+                                        disabled="@_sportsRatingBusy">Save</button>
+                                <button class="btn btn-sm btn-link text-muted"
+                                        @onclick="() => _pendingSportsRating.Remove(match.Id)">Clear</button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
     @* ── Standings ─────────────────────────────────────────────────────────────── *@
     @if (_standings.Any())
     {
@@ -395,11 +455,46 @@ else
                             <td>@PlayerNameCell(player)</td>
                             <td>@(player.ArmyFaction ?? "—")</td>
                             <td>@(player.IsDropped ? "Dropped" : "Active")</td>
+                            <td>
+                                @if (_myPlayerId.HasValue && player.Id != _myPlayerId)
+                                {
+                                    <button class="btn btn-sm btn-link text-danger p-0"
+                                            title="Report player"
+                                            @onclick="() => StartReport(player.Id)">🚩</button>
+                                }
+                            </td>
                         </tr>
                     }
                 </tbody>
             </table>
         </div>
+        @* Report inline form *@
+        @if (_reportingPlayerId.HasValue)
+        {
+            var rp = _players.FirstOrDefault(p => p.Id == _reportingPlayerId);
+            <div class="card mt-3 border-danger" style="max-width:480px">
+                <div class="card-body">
+                    <h6 class="card-title text-danger">Report @(rp?.Name ?? "player")</h6>
+                    @if (_reportSuccess)
+                    {
+                        <div class="alert alert-success py-2 small">Report submitted. The organizer has been notified.</div>
+                    }
+                    else
+                    {
+                        <textarea class="form-control mb-2" rows="3" maxlength="500"
+                                  @bind="_reportReason"
+                                  placeholder="Describe the issue (max 500 chars)" />
+                        <button class="btn btn-sm btn-danger me-2"
+                                @onclick="SubmitReport"
+                                disabled="@(string.IsNullOrWhiteSpace(_reportReason) || _reportSubmitting)">
+                            Submit report
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary"
+                                @onclick="() => _reportingPlayerId = null">Cancel</button>
+                    }
+                </div>
+            </div>
+        }
     }
 }
 
@@ -420,6 +515,11 @@ else
     private List<Organization> _userOrgs = [];
     private Guid? _selectedOrgId;
     private bool _loading = true;
+    private bool _checkInBusy;
+    private bool _sportsRatingBusy;
+    private Dictionary<Guid, int> _pendingSportsRating = [];
+    // (roundNumber, match) for scored matches the current player participated in
+    private List<(int rn, Match match)> _ratedMatches = [];
     private string? _sessionEmail;
     private Guid? _myPlayerId;
     private Match? _myCurrentMatch;   // unscored match in the latest incomplete round
@@ -450,7 +550,7 @@ else
         if (_tournament is not null)
         {
             _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
-            _standings = [.. await StandingsService.ComputeAsync(_tournament.Id, _tournament.ScoringSystem)];
+            _standings = [.. await StandingsService.ComputeAsync(_tournament.Id, _tournament.ScoringSystem, _tournament.Tiebreakers)];
 
             if (_sessionEmail is not null)
             {
@@ -485,6 +585,18 @@ else
                     && !m.IsScored && m.Player2Id is not null);
             }
         }
+        // Build rated-matches list for sportsmanship UI
+        if (_myPlayerId.HasValue)
+        {
+            _ratedMatches = _allRounds
+                .OrderBy(x => x.Round.RoundNumber)
+                .SelectMany(x => x.Matches
+                    .Where(m => m.IsScored && m.Player2Id is not null &&
+                                (m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId))
+                    .Select(m => (x.Round.RoundNumber, m)))
+                .ToList();
+        }
+
         var ratingList = await EloService.GetLeaderboardAsync();
         _playerRatings = ratingList.ToDictionary(r => r.Email, StringComparer.OrdinalIgnoreCase);
 
@@ -545,6 +657,72 @@ else
         }
     }
 
+    // ── Check-in ──────────────────────────────────────────────────────────────
+    private async Task CheckIn()
+    {
+        if (_myPlayerId is null) return;
+        _checkInBusy = true;
+        await PlayerService.SetCheckInAsync(_myPlayerId.Value, true);
+        _players = [.. await PlayerService.ListByTournamentAsync(_tournament!.Id)];
+        _checkInBusy = false;
+    }
+
+    // ── Sportsmanship ─────────────────────────────────────────────────────────
+    private bool RatingGiven(Match m) =>
+        _myPlayerId.HasValue &&
+        (m.Player1Id == _myPlayerId ? m.Player1SportsRating.HasValue : m.Player2SportsRating.HasValue);
+
+    private void SubmitSportsRating(Guid matchId, int stars) =>
+        _pendingSportsRating[matchId] = stars;
+
+    private async Task SaveSportsRating(Guid matchId)
+    {
+        if (!_pendingSportsRating.TryGetValue(matchId, out var rating) || _myPlayerId is null) return;
+        _sportsRatingBusy = true;
+        try
+        {
+            await RoundService.SetSportsRatingAsync(matchId, _myPlayerId.Value, rating);
+            _pendingSportsRating.Remove(matchId);
+            await RefreshRoundsAsync();
+            // Rebuild rated matches
+            _ratedMatches = _allRounds
+                .OrderBy(x => x.Round.RoundNumber)
+                .SelectMany(x => x.Matches
+                    .Where(m => m.IsScored && m.Player2Id is not null &&
+                                (m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId))
+                    .Select(m => (x.Round.RoundNumber, m)))
+                .ToList();
+        }
+        finally { _sportsRatingBusy = false; }
+    }
+
+    // ── Report player ─────────────────────────────────────────────────────────
+    private Guid? _reportingPlayerId;
+    private string _reportReason = string.Empty;
+    private bool _reportSubmitting;
+    private bool _reportSuccess;
+
+    private void StartReport(Guid playerId)
+    {
+        _reportingPlayerId = playerId;
+        _reportReason = string.Empty;
+        _reportSuccess = false;
+    }
+
+    private async Task SubmitReport()
+    {
+        if (_reportingPlayerId is null || string.IsNullOrWhiteSpace(_reportReason)) return;
+        _reportSubmitting = true;
+        try
+        {
+            await PlayerReportService.FileReportAsync(
+                _tournament!.Id, _myPlayerId, _reportingPlayerId.Value, _reportReason);
+            _reportSuccess = true;
+            _reportingPlayerId = null;
+        }
+        finally { _reportSubmitting = false; }
+    }
+
     private RenderFragment PlayerNameCell(Player? player) => __builder =>
     {
         if (player is null) { __builder.AddContent(0, "—"); return; }
@@ -575,7 +753,7 @@ else
                 _submitIWasAttacker.Value);
 
             await RefreshRoundsAsync();
-            _standings = [.. await StandingsService.ComputeAsync(_tournament!.Id, _tournament.ScoringSystem)];
+            _standings = [.. await StandingsService.ComputeAsync(_tournament!.Id, _tournament.ScoringSystem, _tournament.Tiebreakers)];
             _submitSuccess = true;
         }
         catch (Exception ex)
@@ -604,7 +782,7 @@ else
                 OrganizationId: _selectedOrgId
             ));
             _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
-            _standings = [.. await StandingsService.ComputeAsync(_tournament.Id, _tournament.ScoringSystem)];
+            _standings = [.. await StandingsService.ComputeAsync(_tournament.Id, _tournament.ScoringSystem, _tournament.Tiebreakers)];
             await RefreshRoundsAsync();
             _registrationSuccess = true;
             _myRegistrationSuccess = true;

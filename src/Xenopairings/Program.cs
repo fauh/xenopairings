@@ -14,6 +14,8 @@ using Xenopairings.Services;
 using Xenopairings.Services.Auth;
 using Xenopairings.Services.GitHub;
 using Xenopairings.Services.Organizations;
+using Xenopairings.Services.Reports;
+using Xenopairings.Services.TopCut;
 using Xenopairings.Services.Backups;
 using Xenopairings.Services.Elo;
 using Xenopairings.Services.Email;
@@ -157,6 +159,8 @@ builder.Services.Configure<GitHubSettings>(
 builder.Services.AddHttpClient<GitHubIssueService>();
 builder.Services.AddScoped<IOrganizationService, OrganizationService>();
 builder.Services.AddScoped<IEloService, EloService>();
+builder.Services.AddScoped<IPlayerReportService, PlayerReportService>();
+builder.Services.AddScoped<ITopCutService, TopCutService>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
 // ── Cookie authentication ─────────────────────────────────────────────────────

@@ -22,4 +22,8 @@ public class Match
     /// <summary>Null for individual-event matches. Set for matches inside a team matchup.</summary>
     public Guid? TeamMatchupId { get; set; }
     public TeamMatchup? TeamMatchup { get; set; }
+    /// <summary>1–5 sportsmanship rating given by Player 1 for this game. Null = not yet rated.</summary>
+    public int? Player1SportsRating { get; set; }
+    /// <summary>1–5 sportsmanship rating given by Player 2 for this game. Null = not yet rated.</summary>
+    public int? Player2SportsRating { get; set; }
 }

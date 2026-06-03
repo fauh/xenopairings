@@ -19,6 +19,12 @@ public interface IRoundService
     Task<IReadOnlyList<Match>> GetMatchesAsync(Guid roundId);
 
     /// <summary>
+    /// Records a 1–5 sportsmanship rating from a player for their match.
+    /// The submitting player must be Player1 or Player2 of the match.
+    /// </summary>
+    Task SetSportsRatingAsync(Guid matchId, Guid submittingPlayerId, int rating);
+
+    /// <summary>
     /// Overwrites the scores (and optional metadata) on any scored match, including those in
     /// completed rounds. Updates PlayerRatingHistory raw scores but does NOT recalculate ELO
     /// (the original ELO delta is kept as-is).

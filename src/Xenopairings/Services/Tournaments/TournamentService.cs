@@ -42,6 +42,9 @@ public class TournamentService(
                 ScoringSystem = request.ScoringSystem,
                 IsTeamEvent = request.IsTeamEvent,
                 TeamSize = request.IsTeamEvent ? request.TeamSize : null,
+                TiebreakersJson = request.TiebreakersJson,
+                TopCutSize = request.TopCutSize,
+                CheckInEnabled = request.CheckInEnabled,
                 CreatedAt = DateTimeOffset.UtcNow,
             };
 
@@ -132,6 +135,14 @@ public class TournamentService(
         var tournament = await db.Tournaments.FindAsync(tournamentId);
         if (tournament is null) return;
         tournament.RegistrationOpen = open;
+        await db.SaveChangesAsync();
+    }
+
+    public async Task SetCheckInEnabledAsync(Guid tournamentId, bool enabled)
+    {
+        var t = await db.Tournaments.FindAsync(tournamentId);
+        if (t is null) return;
+        t.CheckInEnabled = enabled;
         await db.SaveChangesAsync();
     }
 

@@ -70,6 +70,14 @@ public class PlayerService(
         return [.. players.OrderByDescending(p => p.Tournament.StartsAt)];
     }
 
+    public async Task SetCheckInAsync(Guid playerId, bool checkedIn)
+    {
+        var player = await db.Players.FindAsync(playerId);
+        if (player is null) return;
+        player.IsCheckedIn = checkedIn;
+        await db.SaveChangesAsync();
+    }
+
     public async Task UpdateRegistrationAsync(Guid playerId, string? armyFaction, string? armyList)
     {
         var player = await db.Players.FindAsync(playerId);

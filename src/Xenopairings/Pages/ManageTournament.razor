@@ -5,9 +5,13 @@
 @using Xenopairings.Services.Tournaments
 @using Xenopairings.Services.Players
 @using Xenopairings.Services.Rounds
+@using Xenopairings.Services.Reports
+@using Xenopairings.Services.TopCut
 @inject ITournamentService TournamentService
 @inject IPlayerService PlayerService
 @inject IRoundService RoundService
+@inject IPlayerReportService PlayerReportService
+@inject ITopCutService TopCutService
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -96,6 +100,193 @@ else
             }
         </div>
     </div>
+
+    @* ── Check-in ──────────────────────────────────────────────────────────────── *@
+    @if (_tournament.CheckInEnabled && _tournament.Status != TournamentStatus.Ended)
+    {
+        var checkedIn = _players.Count(p => !p.IsDropped && p.IsCheckedIn);
+        var total = _players.Count(p => !p.IsDropped);
+        <div class="card mb-4">
+            <div class="card-body">
+                <h2 class="h5 card-title">
+                    Check-in
+                    <span class="badge text-bg-secondary ms-2 fw-normal">@checkedIn / @total</span>
+                </h2>
+                <p class="text-muted small mb-3">Players must check in before round 1. Only checked-in players are paired.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Player</th><th>Status</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var player in _players.Where(p => !p.IsDropped).OrderBy(p => p.Name))
+                            {
+                                <tr>
+                                    <td>@player.Name</td>
+                                    <td>
+                                        @if (player.IsCheckedIn)
+                                        {
+                                            <span class="badge text-bg-success">✓ Checked in</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge text-bg-secondary">Not checked in</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm @(player.IsCheckedIn ? "btn-outline-danger" : "btn-outline-success")"
+                                                @onclick="() => ToggleCheckIn(player.Id, !player.IsCheckedIn)"
+                                                disabled="@_saving">
+                                            @(player.IsCheckedIn ? "Undo" : "Check in")
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* ── Player reports ─────────────────────────────────────────────────────────── *@
+    @if (_reports.Any())
+    {
+        var unresolved = _reports.Count(r => !r.IsResolved);
+        <div class="card mb-4 @(unresolved > 0 ? "border-danger" : "")">
+            <div class="card-header d-flex align-items-center gap-2">
+                <strong>Player reports</strong>
+                @if (unresolved > 0)
+                {
+                    <span class="badge text-bg-danger">@unresolved unresolved</span>
+                }
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr><th>Reported</th><th>Reporter</th><th>Reason</th><th>Status</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var report in _reports)
+                            {
+                                <tr class="@(report.IsResolved ? "text-muted" : "")">
+                                    <td>@(report.ReportedPlayer?.Name ?? "—")</td>
+                                    <td>@(report.ReporterPlayer?.Name ?? "anonymous")</td>
+                                    <td class="small">@report.Reason</td>
+                                    <td>
+                                        @if (report.IsResolved)
+                                        {
+                                            <span class="badge text-bg-secondary">Resolved</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge text-bg-danger">Open</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (!report.IsResolved)
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary"
+                                                    @onclick="() => ResolveReport(report.Id)"
+                                                    disabled="@_saving">
+                                                Resolve
+                                            </button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* ── Top cut bracket ────────────────────────────────────────────────────────── *@
+    @if (_tournament.TopCutSize.HasValue && _tournament.Status == TournamentStatus.InProgress)
+    {
+        var allSwissComplete = _rounds.Any() && _rounds.All(r => r.IsComplete);
+        <div class="card mb-4">
+            <div class="card-header"><strong>Top @_tournament.TopCutSize cut</strong></div>
+            <div class="card-body">
+                @if (!_topCutMatches.Any())
+                {
+                    <button class="btn btn-primary btn-sm"
+                            disabled="@(!allSwissComplete || _saving)"
+                            @onclick="GenerateTopCut"
+                            title="@(allSwissComplete ? "" : "Complete all Swiss rounds first")">
+                        Generate top-@_tournament.TopCutSize bracket
+                    </button>
+                    @if (!allSwissComplete)
+                    {
+                        <small class="text-muted ms-2">Complete all Swiss rounds first.</small>
+                    }
+                }
+                else
+                {
+                    @foreach (var bracketRound in _topCutMatches.GroupBy(m => m.BracketRound).OrderBy(g => g.Key))
+                    {
+                        var roundLabel = bracketRound.Key == _topCutMatches.Max(m => m.BracketRound) ? "Final"
+                            : bracketRound.Key == _topCutMatches.Max(m => m.BracketRound) - 1 ? "Semi-final"
+                            : $"Round {bracketRound.Key}";
+                        <h6 class="mt-3">@roundLabel</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr><th>Player 1</th><th>Player 2</th><th>Score</th><th></th></tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var m in bracketRound.OrderBy(m => m.MatchNumber))
+                                    {
+                                        <tr>
+                                            <td>
+                                                @(m.Player1?.Name ?? "TBD")
+                                                @if (m.WinnerId == m.Player1Id) { <span class="badge text-bg-success ms-1">Winner</span> }
+                                            </td>
+                                            <td>
+                                                @(m.Player2Id is null ? "— (bye)" : (m.Player2?.Name ?? "TBD"))
+                                                @if (m.WinnerId == m.Player2Id) { <span class="badge text-bg-success ms-1">Winner</span> }
+                                            </td>
+                                            <td>
+                                                @if (m.IsScored && m.Player2Id is not null)
+                                                {
+                                                    <span>@m.Player1Score — @m.Player2Score</span>
+                                                }
+                                                else if (!m.IsScored && m.Player1Id is not null && m.Player2Id is not null)
+                                                {
+                                                    var tc = GetTopCutInput(m.Id);
+                                                    <div class="d-flex gap-1 align-items-center">
+                                                        <input type="number" class="form-control form-control-sm" style="width:60px" min="0" placeholder="P1"
+                                                               value="@tc.p1" @oninput="e => SetTopCutScore(m.Id, true, e.Value?.ToString())" />
+                                                        <span>—</span>
+                                                        <input type="number" class="form-control form-control-sm" style="width:60px" min="0" placeholder="P2"
+                                                               value="@tc.p2" @oninput="e => SetTopCutScore(m.Id, false, e.Value?.ToString())" />
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted small">bye</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (!m.IsScored && m.Player1Id is not null && m.Player2Id is not null)
+                                                {
+                                                    var tc = GetTopCutInput(m.Id);
+                                                    var canSave = tc.p1 is not null && tc.p2 is not null;
+                                                    <button class="btn btn-sm btn-outline-primary"
+                                                            disabled="@(!canSave || _saving)"
+                                                            @onclick="() => SaveTopCutScore(m.Id)">Save</button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
 
     @* ── Players ───────────────────────────────────────────────────────────────── *@
     <h2 class="h5">Players</h2>
@@ -445,6 +636,9 @@ else
     private bool _loading = true;
     private bool _saving;
     private bool _confirmEnd;
+    private List<PlayerReport> _reports = [];
+    private List<TopCutMatch> _topCutMatches = [];
+    private Dictionary<Guid, (int? p1, int? p2)> _topCutInputs = [];
     private HashSet<Guid> _confirmRepair = [];
     // Manual pairing state
     private Guid? _manualRoundId;
@@ -481,12 +675,72 @@ else
     {
         _players = [.. await PlayerService.ListByTournamentAsync(_tournament!.Id)];
         _rounds = [.. await RoundService.ListByTournamentAsync(_tournament!.Id)];
+        _reports = [.. await PlayerReportService.ListByTournamentAsync(_tournament!.Id)];
+        _topCutMatches = [.. await TopCutService.GetBracketAsync(_tournament!.Id)];
         _matchesByRound = [];
         foreach (var round in _rounds)
         {
             var matches = await RoundService.GetMatchesAsync(round.Id);
             _matchesByRound[round.Id] = [.. matches];
         }
+    }
+
+    private async Task ToggleCheckIn(Guid playerId, bool checkedIn)
+    {
+        _saving = true;
+        await PlayerService.SetCheckInAsync(playerId, checkedIn);
+        _players = [.. await PlayerService.ListByTournamentAsync(_tournament!.Id)];
+        _saving = false;
+    }
+
+    private async Task ResolveReport(Guid reportId)
+    {
+        _saving = true;
+        await PlayerReportService.ResolveAsync(reportId, null);
+        _reports = [.. await PlayerReportService.ListByTournamentAsync(_tournament!.Id)];
+        _saving = false;
+    }
+
+    private (int? p1, int? p2) GetTopCutInput(Guid matchId)
+    {
+        _topCutInputs.TryGetValue(matchId, out var v);
+        return v;
+    }
+
+    private void SetTopCutScore(Guid matchId, bool isP1, string? raw)
+    {
+        _topCutInputs.TryGetValue(matchId, out var current);
+        var parsed = int.TryParse(raw, out var n) ? (int?)n : null;
+        _topCutInputs[matchId] = isP1 ? (parsed, current.p2) : (current.p1, parsed);
+    }
+
+    private async Task SaveTopCutScore(Guid matchId)
+    {
+        if (!_topCutInputs.TryGetValue(matchId, out var inputs)) return;
+        if (inputs.p1 is null || inputs.p2 is null) return;
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            await TopCutService.EnterTopCutResultAsync(matchId, inputs.p1.Value, inputs.p2.Value);
+            _topCutInputs.Remove(matchId);
+            _topCutMatches = [.. await TopCutService.GetBracketAsync(_tournament!.Id)];
+        }
+        catch (Exception ex) { _errorMessage = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private async Task GenerateTopCut()
+    {
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            await TopCutService.GenerateBracketAsync(_tournament!.Id);
+            _topCutMatches = [.. await TopCutService.GetBracketAsync(_tournament!.Id)];
+        }
+        catch (Exception ex) { _errorMessage = ex.Message; }
+        finally { _saving = false; }
     }
 
     private async Task RepairRandom(Guid roundId)

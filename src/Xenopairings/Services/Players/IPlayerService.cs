@@ -11,6 +11,7 @@ public interface IPlayerService
     Task UpdateRegistrationAsync(Guid playerId, string? armyFaction, string? armyList);
     /// <summary>Returns all active registrations for an email, with Tournament loaded.</summary>
     Task<IReadOnlyList<Player>> ListWithTournamentByEmailAsync(string email);
+    Task SetCheckInAsync(Guid playerId, bool checkedIn);
 }
 
 public record RegisterPlayerRequest(

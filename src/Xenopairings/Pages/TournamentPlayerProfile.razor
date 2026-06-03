@@ -3,12 +3,16 @@
 @using Xenopairings.Services.Tournaments
 @using Xenopairings.Services.Players
 @using Xenopairings.Services.Rounds
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
 @using Xenopairings.Services.Elo
 @using Xenopairings.Services.Pairings
+@using Xenopairings.Services.Reports
 @inject ITournamentService TournamentService
 @inject IPlayerService PlayerService
 @inject IRoundService RoundService
 @inject IEloService EloService
+@inject IPlayerReportService PlayerReportService
 
 <PageTitle>@(_player?.Name ?? "Player") — Xenopairings</PageTitle>
 
@@ -53,19 +57,45 @@ else
                 <span class="badge text-bg-danger mt-1">Dropped</span>
             }
         </div>
-        @if (_globalRating is not null && _globalRating.IsProfilePublic)
-        {
-            <a href="/player/@_globalRating.Id" class="btn btn-outline-secondary btn-sm align-self-start">
-                Global profile &amp; ELO →
-            </a>
-        }
-        else if (_globalRating is not null)
-        {
-            <a href="/player/@_globalRating.Id" class="btn btn-outline-secondary btn-sm align-self-start">
-                ELO profile →
-            </a>
-        }
+        <div class="d-flex gap-2">
+            @if (_globalRating is not null)
+            {
+                <a href="/player/@_globalRating.Id" class="btn btn-outline-secondary btn-sm">
+                    @(_globalRating.IsProfilePublic ? "Global profile & ELO →" : "ELO profile →")
+                </a>
+            }
+            @if (_canReport)
+            {
+                <button class="btn btn-sm btn-outline-danger" @onclick="() => _showReport = !_showReport">
+                    🚩 Report player
+                </button>
+            }
+        </div>
     </div>
+    @if (_showReport)
+    {
+        <div class="card mb-4 border-danger" style="max-width:480px">
+            <div class="card-body">
+                <h6 class="card-title text-danger">Report @_player!.Name</h6>
+                @if (_reportSuccess)
+                {
+                    <div class="alert alert-success py-2 small">Report submitted. The organizer has been notified.</div>
+                }
+                else
+                {
+                    <textarea class="form-control mb-2" rows="3" maxlength="500"
+                              @bind="_reportReason" placeholder="Describe the issue" />
+                    <button class="btn btn-sm btn-danger me-2"
+                            @onclick="SubmitReport"
+                            disabled="@(string.IsNullOrWhiteSpace(_reportReason) || _reportBusy)">
+                        Submit
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary"
+                            @onclick="() => _showReport = false">Cancel</button>
+                }
+            </div>
+        </div>
+    }
 
     @* ── Army list ────────────────────────────────────────────────────────────── *@
     <div class="mb-4">
@@ -168,12 +198,19 @@ else
 @code {
     [Parameter] public string Slug { get; set; } = string.Empty;
     [Parameter] public Guid PlayerId { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private Tournament? _tournament;
     private Player? _player;
     private PlayerRating? _globalRating;
     private List<RoundRow> _roundRows = [];
     private bool _loading = true;
+    private bool _canReport;
+    private bool _showReport;
+    private string _reportReason = string.Empty;
+    private bool _reportBusy;
+    private bool _reportSuccess;
+    private Guid? _myPlayerId;
 
     private record RoundRow(
         int RoundNumber, int TableNumber,
@@ -184,12 +221,24 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateTask;
+        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+
         _tournament = await TournamentService.GetBySlugAsync(Slug);
         if (_tournament is null) { _loading = false; return; }
 
         var players = await PlayerService.ListByTournamentAsync(_tournament.Id);
         _player = players.FirstOrDefault(p => p.Id == PlayerId);
         if (_player is null) { _loading = false; return; }
+
+        // Check if the viewer can report this player
+        if (email is not null)
+        {
+            var me = players.FirstOrDefault(p =>
+                string.Equals(p.Email, email, StringComparison.OrdinalIgnoreCase));
+            _myPlayerId = me?.Id;
+            _canReport = _myPlayerId.HasValue && _myPlayerId != _player.Id;
+        }
 
         // Try to find global ELO profile
         if (!string.IsNullOrWhiteSpace(_player.Email))
@@ -226,6 +275,19 @@ else
         }
 
         _loading = false;
+    }
+
+    private async Task SubmitReport()
+    {
+        if (_tournament is null || _player is null || string.IsNullOrWhiteSpace(_reportReason)) return;
+        _reportBusy = true;
+        try
+        {
+            await PlayerReportService.FileReportAsync(
+                _tournament.Id, _myPlayerId, _player.Id, _reportReason);
+            _reportSuccess = true;
+        }
+        finally { _reportBusy = false; }
     }
 
     private static (string label, string css) ResultLabel(int myScore, int oppScore, ScoringSystem scoring)

@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace Xenopairings.Models;
 
 public class Tournament
@@ -23,4 +26,34 @@ public class Tournament
     public bool IsTeamEvent { get; set; }
     /// <summary>Number of players per team. Null for individual events.</summary>
     public int? TeamSize { get; set; }
+
+    // ── Phase 3b additions ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// JSON-serialised ordered list of TiebreakerType values applied after Wins.
+    /// Default: Points → StrengthOfSchedule → Random.
+    /// </summary>
+    public string TiebreakersJson { get; set; } =
+        "[\"Points\",\"StrengthOfSchedule\",\"Random\"]";
+
+    // Options shared for both serialize and deserialize to keep stored values as strings.
+    private static readonly JsonSerializerOptions TbJsonOpts = new()
+    {
+        Converters = { new JsonStringEnumConverter() },
+    };
+
+    /// <summary>Convenience accessor — deserialises TiebreakersJson.</summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public IReadOnlyList<TiebreakerType> Tiebreakers =>
+        JsonSerializer.Deserialize<List<TiebreakerType>>(TiebreakersJson, TbJsonOpts)
+        ?? [TiebreakerType.Points];
+
+    internal static string SerializeTiebreakers(IEnumerable<TiebreakerType> tbs) =>
+        JsonSerializer.Serialize(tbs.ToList(), TbJsonOpts);
+
+    /// <summary>Top-cut size after Swiss (4/8/16/32). Null = no cut.</summary>
+    public int? TopCutSize { get; set; }
+
+    /// <summary>When true, only checked-in players are included in round-1 pairings.</summary>
+    public bool CheckInEnabled { get; set; }
 }

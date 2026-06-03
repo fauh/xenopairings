@@ -61,7 +61,7 @@ else
             {
                 <a href="/t/@_tournament.Slug/round/@n"
                    class="btn btn-sm @(n == RoundNumber ? "btn-primary" : "btn-outline-secondary")">
-                    R@n
+                    R@(n)
                 </a>
             }
         </div>
@@ -191,14 +191,14 @@ else
                                 }
                             </td>
                             <td class="text-muted small fw-normal">
-                                @if (match.Player1WentFirst == true) { @(match.Player1?.Name ?? "P1") }
-                                else if (match.Player1WentFirst == false) { @(match.Player2?.Name ?? "P2") }
-                                else { <span>—</span> }
+                                <span>@(match.Player1WentFirst == true  ? match.Player1?.Name ?? "P1"
+                                       : match.Player1WentFirst == false ? match.Player2?.Name ?? "P2"
+                                       : "—")</span>
                             </td>
                             <td class="text-muted small fw-normal">
-                                @if (match.Player1IsAttacker == true) { @(match.Player1?.Name ?? "P1") }
-                                else if (match.Player1IsAttacker == false) { @(match.Player2?.Name ?? "P2") }
-                                else { <span>—</span> }
+                                <span>@(match.Player1IsAttacker == true  ? match.Player1?.Name ?? "P1"
+                                       : match.Player1IsAttacker == false ? match.Player2?.Name ?? "P2"
+                                       : "—")</span>
                             </td>
                             <td class="fw-normal">
                                 @if (match.Player2Id is null)

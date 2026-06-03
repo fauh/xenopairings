@@ -260,14 +260,14 @@ else
                                     <td>@PlayerNameCell(match.Player1)</td>
                                     <td>@if (match.Player2Id is null) {<span class="text-muted">— (bye)</span>} else {@PlayerNameCell(match.Player2)}</td>
                                     <td class="text-muted small fw-normal">
-                                        @if (match.Player1WentFirst == true) { <span>@(match.Player1?.Name ?? "P1")</span> }
-                                        else if (match.Player1WentFirst == false) { <span>@(match.Player2?.Name ?? "P2")</span> }
-                                        else { <span>—</span> }
+                                        <span>@(match.Player1WentFirst == true  ? match.Player1?.Name ?? "P1"
+                                               : match.Player1WentFirst == false ? match.Player2?.Name ?? "P2"
+                                               : "—")</span>
                                     </td>
                                     <td class="text-muted small fw-normal">
-                                        @if (match.Player1IsAttacker == true) { <span>@(match.Player1?.Name ?? "P1")</span> }
-                                        else if (match.Player1IsAttacker == false) { <span>@(match.Player2?.Name ?? "P2")</span> }
-                                        else { <span>—</span> }
+                                        <span>@(match.Player1IsAttacker == true  ? match.Player1?.Name ?? "P1"
+                                               : match.Player1IsAttacker == false ? match.Player2?.Name ?? "P2"
+                                               : "—")</span>
                                     </td>
                                     <td class="fw-normal">
                                         @if (match.Player2Id is null)

@@ -20,7 +20,6 @@
                     </Authorized>
                 </AuthorizeView>
                 <form method="post" action="/logout" style="display:inline">
-                    @* Antiforgery token required for the logout POST *@
                     <AntiforgeryToken />
                     <button type="submit" class="nav-link btn btn-link p-0">Sign out</button>
                 </form>
@@ -40,8 +39,38 @@
     </div>
 </nav>
 
+@* Email verification banner — shown when logged in but not yet verified *@
+@if (_showVerifyBanner)
+{
+    <div class="alert alert-warning mb-0 rounded-0 py-2 small text-center">
+        📧 Please verify your email address.
+        <button class="btn btn-link btn-sm py-0 alert-link" @onclick="ResendVerification" disabled="@_resendBusy">
+            @(_resendSent ? "Sent!" : "Resend verification email")
+        </button>
+    </div>
+}
+
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Inject] private Xenopairings.Services.Auth.IAuthService AuthService { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
     private bool _isDark;
+    private bool _showVerifyBanner;
+    private bool _resendBusy;
+    private bool _resendSent;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateTask;
+        var user = authState.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var verified = user.FindFirst("email_verified")?.Value;
+            _showVerifyBanner = verified != "true";
+        }
+    }
 
     private async Task ToggleTheme()
     {
@@ -49,5 +78,16 @@
         await JS.InvokeVoidAsync("document.documentElement.setAttribute", "data-theme", _isDark ? "dark" : "light");
     }
 
-    [Inject] private IJSRuntime JS { get; set; } = default!;
+    private async Task ResendVerification()
+    {
+        var authState = await AuthStateTask;
+        var userId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userId is null || !Guid.TryParse(userId, out var uid)) return;
+
+        _resendBusy = true;
+        var baseUrl = Nav.BaseUri.TrimEnd('/');
+        await AuthService.SendVerificationEmailAsync(uid, baseUrl);
+        _resendSent = true;
+        _resendBusy = false;
+    }
 }

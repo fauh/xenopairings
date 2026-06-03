@@ -1,0 +1,31 @@
+@page
+@model Xenopairings.Pages.VerifyEmailModel
+@{ Layout = null; }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Email verification — Xenopairings</title>
+    <link rel="stylesheet" href="~/css/bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+    <main class="page-content" style="max-width:420px">
+        @if (Model.Success)
+        {
+            <div class="alert alert-success mt-4">
+                <strong>Email verified!</strong> Your account is fully confirmed.
+            </div>
+            <a href="/dashboard" class="btn btn-primary mt-2">Go to dashboard</a>
+        }
+        else
+        {
+            <div class="alert alert-danger mt-4">
+                This verification link is invalid or has already been used.
+            </div>
+            <a href="/" class="btn btn-outline-secondary mt-2">Back to home</a>
+        }
+    </main>
+</body>
+</html>

@@ -34,7 +34,7 @@ public class LoginModel(IAuthService authService, IOptions<AdminSettings> adminS
 
         await HttpContext.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,
-            BuildPrincipal(user.Email, user.Id, adminSettings.Value));
+            BuildPrincipal(user.Email, user.Id, adminSettings.Value, user.EmailVerified));
 
         if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
             return Redirect(returnUrl);
@@ -42,12 +42,14 @@ public class LoginModel(IAuthService authService, IOptions<AdminSettings> adminS
         return Redirect("/dashboard");
     }
 
-    internal static ClaimsPrincipal BuildPrincipal(string email, Guid userId, AdminSettings settings)
+    internal static ClaimsPrincipal BuildPrincipal(
+        string email, Guid userId, AdminSettings settings, bool emailVerified = false)
     {
         var claims = new List<Claim>
         {
             new(ClaimTypes.Email, email),
             new(ClaimTypes.NameIdentifier, userId.ToString()),
+            new("email_verified", emailVerified ? "true" : "false"),
         };
         if (settings.IsAdmin(email))
             claims.Add(new Claim(ClaimTypes.Role, "Admin"));

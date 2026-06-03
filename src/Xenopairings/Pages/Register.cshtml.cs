@@ -43,6 +43,9 @@ public class RegisterModel(IAuthService authService, IOptions<AdminSettings> adm
             await HttpContext.SignInAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme,
                 LoginModel.BuildPrincipal(user.Email, user.Id, adminSettings.Value));
+            // Send verification email (fire-and-forget — don't block registration on email error)
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            _ = authService.SendVerificationEmailAsync(user.Id, baseUrl);
             return Redirect("/dashboard");
         }
         catch (InvalidOperationException ex)

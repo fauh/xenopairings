@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Xenopairings.Models;
 using Xenopairings.Services.Auth;
+using Xenopairings.Services.Email;
 using Xenopairings.Tests.Infrastructure;
 using Shouldly;
 
@@ -14,7 +16,11 @@ public class AuthServiceTests : IClassFixture<InMemoryDatabaseFixture>
 
     public AuthServiceTests(InMemoryDatabaseFixture db) => _db = db;
 
-    private AuthService BuildSut() => new(_db.CreateDbContext(), _hasher);
+    private AuthService BuildSut() => new(
+        _db.CreateDbContext(), _hasher,
+        new NullEmailSender(),
+        Options.Create(new EmailSettings { BaseUrl = "https://test.example" }),
+        NullLogger<AuthService>.Instance);
 
     // ── Register ──────────────────────────────────────────────────────────────
 

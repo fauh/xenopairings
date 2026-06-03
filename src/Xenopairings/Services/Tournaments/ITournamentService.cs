@@ -16,6 +16,8 @@ public interface ITournamentService
     Task EndAsync(Guid tournamentId);
     /// <summary>Returns all non-private tournaments, newest first.</summary>
     Task<IReadOnlyList<Tournament>> ListPublicAsync();
+    /// <summary>Returns ALL tournaments (including private), newest first. Admin use only.</summary>
+    Task<IReadOnlyList<Tournament>> ListAllAsync();
     /// <summary>Returns tournaments where OrganizerEmail matches, newest first.</summary>
     Task<IReadOnlyList<Tournament>> ListByOrganizerEmailAsync(string email);
 }

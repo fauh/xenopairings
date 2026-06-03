@@ -3,19 +3,17 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Options;
 using Xenopairings.Services.Auth;
 
 namespace Xenopairings.Pages;
 
-public class LoginModel(IAuthService authService) : PageModel
+public class LoginModel(IAuthService authService, IOptions<AdminSettings> adminSettings) : PageModel
 {
     public string? Email { get; private set; }
     public string? ErrorMessage { get; private set; }
 
-    public void OnGet(string? returnUrl = null)
-    {
-        ViewData["ReturnUrl"] = returnUrl;
-    }
+    public void OnGet(string? returnUrl = null) => ViewData["ReturnUrl"] = returnUrl;
 
     public async Task<IActionResult> OnPostAsync(string email, string password, string? returnUrl = null)
     {
@@ -34,19 +32,27 @@ public class LoginModel(IAuthService authService) : PageModel
             return Page();
         }
 
-        var claims = new List<Claim>
-        {
-            new(ClaimTypes.Email, user.Email),
-            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-        };
-        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        var principal = new ClaimsPrincipal(identity);
-
-        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+        await HttpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            BuildPrincipal(user.Email, user.Id, adminSettings.Value));
 
         if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
             return Redirect(returnUrl);
 
         return Redirect("/dashboard");
+    }
+
+    internal static ClaimsPrincipal BuildPrincipal(string email, Guid userId, AdminSettings settings)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.Email, email),
+            new(ClaimTypes.NameIdentifier, userId.ToString()),
+        };
+        if (settings.IsAdmin(email))
+            claims.Add(new Claim(ClaimTypes.Role, "Admin"));
+
+        return new ClaimsPrincipal(
+            new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
     }
 }

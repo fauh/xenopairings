@@ -110,6 +110,12 @@ public class TournamentService(
         return [.. tournaments.OrderByDescending(t => t.StartsAt)];
     }
 
+    public async Task<IReadOnlyList<Tournament>> ListAllAsync()
+    {
+        var tournaments = await db.Tournaments.ToListAsync();
+        return [.. tournaments.OrderByDescending(t => t.StartsAt)];
+    }
+
     public async Task<IReadOnlyList<Tournament>> ListByOrganizerEmailAsync(string email)
     {
         var normalised = email.Trim().ToLowerInvariant();

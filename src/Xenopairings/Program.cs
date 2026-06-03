@@ -146,6 +146,8 @@ builder.Services.AddScoped<TeamStandingsService>();
 builder.Services.AddScoped<IRoundService, RoundService>();
 // RoundService takes IEmailSender + IOptions<EmailSettings> — already registered above
 builder.Services.AddScoped<ITeamService, TeamService>();
+builder.Services.Configure<AdminSettings>(
+    builder.Configuration.GetSection(AdminSettings.SectionName));
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IOrganizationService, OrganizationService>();
 builder.Services.AddScoped<IEloService, EloService>();

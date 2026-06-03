@@ -440,9 +440,10 @@ else
             return;
         }
 
+        var isAdmin = authState.User.IsInRole("Admin");
         var candidate = await TournamentService.GetBySlugAsync(Slug);
         if (candidate is not null &&
-            string.Equals(candidate.OrganizerEmail, email, StringComparison.OrdinalIgnoreCase))
+            (isAdmin || string.Equals(candidate.OrganizerEmail, email, StringComparison.OrdinalIgnoreCase)))
         {
             _tournament = candidate;
             await LoadAllAsync();

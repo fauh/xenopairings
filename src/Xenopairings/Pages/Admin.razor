@@ -1,0 +1,122 @@
+@page "/admin"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.Extensions.Options
+@using Xenopairings.Data
+@using Xenopairings.Models
+@using Xenopairings.Services.Auth
+@using Xenopairings.Services.Tournaments
+@using Microsoft.EntityFrameworkCore
+@inject ITournamentService TournamentService
+@inject AppDbContext Db
+@inject IOptions<AdminSettings> AdminOptions
+
+<PageTitle>Admin — Xenopairings</PageTitle>
+
+@if (_loading)
+{
+    <LoadingSpinner />
+}
+else if (!_isAdmin)
+{
+    <div class="empty-state">
+        <div class="empty-state-icon">🔒</div>
+        <h3>Access denied</h3>
+        <p>This page is for administrators only.</p>
+        <a href="/" class="btn btn-outline-secondary mt-2">Home</a>
+    </div>
+}
+else
+{
+    <h1>Admin panel</h1>
+    <p class="text-muted">Showing all data including private tournaments.</p>
+
+    @* ── Users ───────────────────────────────────────────────────────────────── *@
+    <h2 class="h5 mt-4">Users (@_users.Count)</h2>
+    <div class="table-responsive mb-4">
+        <table class="table table-sm">
+            <thead>
+                <tr><th>Email</th><th>Joined</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var u in _users)
+                {
+                    <tr>
+                        <td>@u.Email</td>
+                        <td class="text-muted small text-nowrap">
+                            @u.CreatedAt.ToLocalTime().ToString("d MMM yyyy")
+                        </td>
+                        <td>
+                            @if (AdminOptions.Value.IsAdmin(u.Email))
+                            {
+                                <span class="badge text-bg-danger">admin</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @* ── Tournaments ─────────────────────────────────────────────────────────── *@
+    <h2 class="h5">All tournaments (@_tournaments.Count)</h2>
+    <div class="table-responsive mb-4">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Organizer</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var t in _tournaments)
+                {
+                    var (label, css) = t.Status switch
+                    {
+                        TournamentStatus.InProgress => ("In Progress", "text-bg-primary"),
+                        TournamentStatus.Ended      => ("Ended",       "text-bg-secondary"),
+                        _ when t.RegistrationOpen   => ("Reg. Open",   "text-bg-success"),
+                        _                           => ("Reg. Closed", "text-bg-warning"),
+                    };
+                    <tr>
+                        <td>
+                            <a href="/t/@t.Slug">@t.Title</a>
+                            @if (t.IsPrivate) { <span class="badge text-bg-secondary ms-1 small">private</span> }
+                        </td>
+                        <td class="text-muted small">@t.OrganizerEmail</td>
+                        <td class="text-muted small text-nowrap">
+                            @t.StartsAt.ToLocalTime().ToString("d MMM yyyy")
+                        </td>
+                        <td><span class="badge @css">@label</span></td>
+                        <td>
+                            <a href="/t/@t.Slug/manage" class="btn btn-sm btn-outline-primary">Manage</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _isAdmin;
+    private bool _loading = true;
+    private List<User> _users = [];
+    private List<Tournament> _tournaments = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateTask;
+        _isAdmin = authState.User.IsInRole("Admin");
+        if (!_isAdmin) { _loading = false; return; }
+
+        _users = await Db.Users.OrderBy(u => u.Email).ToListAsync();
+        _tournaments = [.. await TournamentService.ListAllAsync()];
+        _loading = false;
+    }
+}

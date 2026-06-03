@@ -1,13 +1,13 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Options;
 using Xenopairings.Services.Auth;
 
 namespace Xenopairings.Pages;
 
-public class RegisterModel(IAuthService authService) : PageModel
+public class RegisterModel(IAuthService authService, IOptions<AdminSettings> adminSettings) : PageModel
 {
     public string? Email { get; private set; }
     public string? ErrorMessage { get; private set; }
@@ -40,17 +40,9 @@ public class RegisterModel(IAuthService authService) : PageModel
         try
         {
             var user = await authService.RegisterAsync(email, password);
-
-            var claims = new List<Claim>
-            {
-                new(ClaimTypes.Email, user.Email),
-                new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            };
-            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
             await HttpContext.SignInAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme,
-                new ClaimsPrincipal(identity));
-
+                LoginModel.BuildPrincipal(user.Email, user.Id, adminSettings.Value));
             return Redirect("/dashboard");
         }
         catch (InvalidOperationException ex)

@@ -14,6 +14,11 @@
             <Authorized>
                 <NavLink class="nav-link" href="/dashboard">Dashboard</NavLink>
                 <NavLink class="nav-link" href="/organizations">Organizations</NavLink>
+                <AuthorizeView Roles="Admin" Context="adminCtx">
+                    <Authorized>
+                        <NavLink class="nav-link" href="/admin">Admin</NavLink>
+                    </Authorized>
+                </AuthorizeView>
                 <form method="post" action="/logout" style="display:inline">
                     @* Antiforgery token required for the logout POST *@
                     <AntiforgeryToken />

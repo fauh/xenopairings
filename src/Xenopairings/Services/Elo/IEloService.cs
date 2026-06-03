@@ -5,10 +5,14 @@ namespace Xenopairings.Services.Elo;
 public interface IEloService
 {
     /// <summary>
-    /// Updates the global ELO ratings for both players in a scored match.
-    /// No-ops if: the match is a bye, either player has no email, or the match is not scored.
+    /// Processes ELO for all scored matches in a tournament using the snapshot approach:
+    /// every match delta is calculated against the player's rating before the tournament started,
+    /// then all deltas are summed and applied in one update.
+    /// Creates PlayerRatingHistory entries for each match (RatingBefore = pre-tournament
+    /// snapshot, RatingAfter = post-tournament rating).
+    /// Should be called exactly once when a tournament is ended.
     /// </summary>
-    Task UpdateMatchRatingsAsync(Guid matchId);
+    Task ProcessTournamentAsync(Guid tournamentId);
 
     /// <summary>Returns all ratings sorted by Rating descending.</summary>
     Task<IReadOnlyList<PlayerRating>> GetLeaderboardAsync();

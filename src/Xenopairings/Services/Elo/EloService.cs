@@ -6,98 +6,146 @@ using Xenopairings.Services.Pairings;
 namespace Xenopairings.Services.Elo;
 
 /// <summary>
-/// Global ELO rating service.
+/// Global ELO rating service — snapshot model.
 ///
-/// Formula: standard Elo with K = 32 and starting rating 1000.
+/// ELO updates only happen when a tournament is ended via ProcessTournamentAsync.
+/// All matches in the tournament are evaluated against the player's pre-tournament rating
+/// (the snapshot). Deltas from every match are summed and applied in one update.
+///
+/// Formula: standard Elo with K = 32, starting rating 1000.
 ///   Expected:  Ea = 1 / (1 + 10^((Rb - Ra) / 400))
-///   New:       Ra' = Ra + K * (Sa - Ea)
+///   Delta:     ΔRa = K × (Sa - Ea)
+///   Net:       Ra' = Ra_snapshot + Σ ΔRa (across all matches in the tournament)
 ///
 /// Outcome (Sa) per scoring system:
 ///   GW:  win=1.0 · draw=0.5 · loss=0.0
 ///   WTC: Sa = player_game_points / 20.0  (fractional; both players' Sa sum to 1)
 ///
 /// Byes and players without an email are skipped silently.
-/// A <see cref="PlayerRatingHistory"/> row is written for each participant after each rated match.
 /// </summary>
 public sealed class EloService(AppDbContext db) : IEloService
 {
     private const double K = 32.0;
     private const double InitialRating = 1000.0;
 
-    public async Task UpdateMatchRatingsAsync(Guid matchId)
+    public async Task ProcessTournamentAsync(Guid tournamentId)
     {
-        var match = await db.Matches
+        var tournament = await db.Tournaments.FindAsync(tournamentId);
+        if (tournament is null) return;
+
+        // Load all scored non-bye matches for this tournament, in round order
+        var matches = await db.Matches
             .Include(m => m.Player1)
             .Include(m => m.Player2)
             .Include(m => m.Round)
-                .ThenInclude(r => r.Tournament)
-            .FirstOrDefaultAsync(m => m.Id == matchId);
+            .Where(m => m.Round.TournamentId == tournamentId
+                     && m.IsScored
+                     && m.Player1Id != null
+                     && m.Player2Id != null)
+            .OrderBy(m => m.Round.RoundNumber)
+            .ThenBy(m => m.TableNumber)
+            .ToListAsync();
 
-        if (match is null || !match.IsScored) return;
-        if (match.Player2Id is null) return;  // bye
+        if (matches.Count == 0) return;
 
-        var p1 = match.Player1;
-        var p2 = match.Player2;
-        if (p1 is null || p2 is null) return;
-        if (string.IsNullOrWhiteSpace(p1.Email) || string.IsNullOrWhiteSpace(p2.Email)) return;
+        // Gather all unique player emails
+        var emailSet = matches
+            .SelectMany(m => new[]
+            {
+                m.Player1?.Email?.ToLowerInvariant(),
+                m.Player2?.Email?.ToLowerInvariant(),
+            })
+            .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Distinct()
+            .ToHashSet()!;
 
-        var tournament = match.Round.Tournament;
-        var (actual1, actual2) = ComputeOutcomes(match, tournament.ScoringSystem);
+        if (emailSet.Count == 0) return;
 
-        var rating1 = await GetOrCreateAsync(p1.Email, p1.Name);
-        var rating2 = await GetOrCreateAsync(p2.Email, p2.Name);
+        // Snapshot: get-or-create PlayerRating for every involved player,
+        //           record their pre-tournament rating.
+        var ratingByEmail = new Dictionary<string, PlayerRating>(StringComparer.OrdinalIgnoreCase);
+        var snapshotByEmail = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
 
-        rating1.DisplayName = p1.Name;
-        rating2.DisplayName = p2.Name;
-
-        var before1 = rating1.Rating;
-        var before2 = rating2.Rating;
-
-        var expected1 = 1.0 / (1.0 + Math.Pow(10, (before2 - before1) / 400.0));
-        var expected2 = 1.0 - expected1;
-
-        rating1.Rating = before1 + K * (actual1 - expected1);
-        rating2.Rating = before2 + K * (actual2 - expected2);
-        rating1.GamesPlayed++;
-        rating2.GamesPlayed++;
-        rating1.LastUpdated = DateTimeOffset.UtcNow;
-        rating2.LastUpdated = DateTimeOffset.UtcNow;
-
-        // History for player 1
-        db.PlayerRatingHistories.Add(new PlayerRatingHistory
+        foreach (var email in emailSet)
         {
-            Id = Guid.NewGuid(),
-            PlayerRatingId = rating1.Id,
-            TournamentId = tournament.Id,
-            TournamentTitle = tournament.Title,
-            TournamentSlug = tournament.Slug,
-            OpponentName = p2.Name,
-            OpponentEmail = p2.Email?.ToLowerInvariant(),
-            MyRawScore = match.Player1Score ?? 0,
-            OpponentRawScore = match.Player2Score ?? 0,
-            ActualOutcome = actual1,
-            RatingBefore = before1,
-            RatingAfter = rating1.Rating,
-            PlayedAt = DateTimeOffset.UtcNow,
-        });
+            // Find the player name from the first match they appear in
+            var name = matches
+                .Select(m => m.Player1?.Email?.ToLowerInvariant() == email ? m.Player1?.Name
+                           : m.Player2?.Email?.ToLowerInvariant() == email ? m.Player2?.Name
+                           : null)
+                .FirstOrDefault(n => n is not null) ?? email;
 
-        // History for player 2
-        db.PlayerRatingHistories.Add(new PlayerRatingHistory
+            var rating = await GetOrCreateAsync(email, name);
+            ratingByEmail[email] = rating;
+            snapshotByEmail[email] = rating.Rating;
+        }
+
+        // Calculate total ELO delta per player using the snapshot ratings
+        var deltaByEmail = emailSet.ToDictionary(e => e, _ => 0.0, StringComparer.OrdinalIgnoreCase);
+        var outcomesByEmail = new Dictionary<string, List<(Guid tournamentId, string opponentEmail, string opponentName, int myScore, int opponentScore, double actualOutcome)>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in emailSet) outcomesByEmail[e] = [];
+
+        foreach (var match in matches)
         {
-            Id = Guid.NewGuid(),
-            PlayerRatingId = rating2.Id,
-            TournamentId = tournament.Id,
-            TournamentTitle = tournament.Title,
-            TournamentSlug = tournament.Slug,
-            OpponentName = p1.Name,
-            OpponentEmail = p1.Email?.ToLowerInvariant(),
-            MyRawScore = match.Player2Score ?? 0,
-            OpponentRawScore = match.Player1Score ?? 0,
-            ActualOutcome = actual2,
-            RatingBefore = before2,
-            RatingAfter = rating2.Rating,
-            PlayedAt = DateTimeOffset.UtcNow,
-        });
+            var p1Email = match.Player1?.Email?.ToLowerInvariant();
+            var p2Email = match.Player2?.Email?.ToLowerInvariant();
+            if (p1Email is null || p2Email is null) continue;
+            if (!snapshotByEmail.ContainsKey(p1Email) || !snapshotByEmail.ContainsKey(p2Email)) continue;
+
+            var (actual1, actual2) = ComputeOutcomes(match, tournament.ScoringSystem);
+
+            // Use SNAPSHOT ratings for expected score calculation
+            var snap1 = snapshotByEmail[p1Email];
+            var snap2 = snapshotByEmail[p2Email];
+            var expected1 = 1.0 / (1.0 + Math.Pow(10, (snap2 - snap1) / 400.0));
+            var expected2 = 1.0 - expected1;
+
+            deltaByEmail[p1Email] += K * (actual1 - expected1);
+            deltaByEmail[p2Email] += K * (actual2 - expected2);
+
+            // Record outcome for history
+            outcomesByEmail[p1Email].Add((tournamentId, p2Email, match.Player2?.Name ?? "?", match.Player1Score ?? 0, match.Player2Score ?? 0, actual1));
+            outcomesByEmail[p2Email].Add((tournamentId, p1Email, match.Player1?.Name ?? "?", match.Player2Score ?? 0, match.Player1Score ?? 0, actual2));
+        }
+
+        // Apply deltas and write history
+        foreach (var email in emailSet)
+        {
+            var rating = ratingByEmail[email];
+            var snapshot = snapshotByEmail[email];
+            var totalDelta = deltaByEmail[email];
+            var newRating = snapshot + totalDelta;
+
+            rating.DisplayName = matches
+                .Select(m => m.Player1?.Email?.ToLowerInvariant() == email ? m.Player1?.Name
+                           : m.Player2?.Email?.ToLowerInvariant() == email ? m.Player2?.Name
+                           : null)
+                .LastOrDefault(n => n is not null) ?? rating.DisplayName;
+            rating.Rating = newRating;
+            rating.GamesPlayed += outcomesByEmail[email].Count;
+            rating.LastUpdated = DateTimeOffset.UtcNow;
+
+            // One history entry per match, all sharing RatingBefore = snapshot, RatingAfter = newRating
+            foreach (var (tid, oppEmail, oppName, myScore, oppScore, actual) in outcomesByEmail[email])
+            {
+                db.PlayerRatingHistories.Add(new PlayerRatingHistory
+                {
+                    Id = Guid.NewGuid(),
+                    PlayerRatingId = rating.Id,
+                    TournamentId = tid,
+                    TournamentTitle = tournament.Title,
+                    TournamentSlug = tournament.Slug,
+                    OpponentEmail = oppEmail,
+                    OpponentName = oppName,
+                    MyRawScore = myScore,
+                    OpponentRawScore = oppScore,
+                    ActualOutcome = actual,
+                    RatingBefore = snapshot,
+                    RatingAfter = newRating,
+                    PlayedAt = DateTimeOffset.UtcNow,
+                });
+            }
+        }
 
         await db.SaveChangesAsync();
     }
@@ -124,9 +172,7 @@ public sealed class EloService(AppDbContext db) : IEloService
             .Where(h => h.PlayerRatingId == ratingId)
             .ToListAsync();
 
-        // Sort in memory to avoid DateTimeOffset SQL translation issues
         var sorted = history.OrderBy(h => h.PlayedAt).ToList();
-
         return (rating, sorted);
     }
 
@@ -165,7 +211,6 @@ public sealed class EloService(AppDbContext db) : IEloService
 
         if (existing is not null) return existing;
 
-        // Inherit VIP status from the User record if one exists
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == normalised);
 
         var created = new PlayerRating

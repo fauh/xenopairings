@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Xenopairings.Data;
 using Xenopairings.Models;
-using Xenopairings.Services.Elo;
 using Xenopairings.Services.Email;
 using Xenopairings.Services.Pairings;
 using Xenopairings.Services.Standings;
@@ -15,7 +14,6 @@ public sealed class RoundService(
     TeamStandingsService teamStandingsService,
     IEmailSender emailSender,
     IOptions<EmailSettings> emailSettings,
-    IEloService eloService,
     ILogger<RoundService> logger) : IRoundService
 {
     public async Task<Round> CreateWithPairingsAsync(Guid tournamentId, string? missionLayout)
@@ -618,11 +616,7 @@ public sealed class RoundService(
         if (player1WentFirst.HasValue)  match.Player1WentFirst  = player1WentFirst;
         match.IsScored = true;
         await db.SaveChangesAsync();
-
-        // ELO update — awaited directly. eloService is a scoped DbContext-backed service;
-        // Task.Run would run after the scope is disposed and the DbContext torn down.
-        try { await eloService.UpdateMatchRatingsAsync(match.Id); }
-        catch (Exception ex) { logger.LogWarning(ex, "ELO update failed for match {MatchId}.", match.Id); }
+        // ELO is now calculated at tournament-end via EloService.ProcessTournamentAsync.
     }
 
     public async Task SubmitMatchResultAsync(
@@ -665,9 +659,7 @@ public sealed class RoundService(
 
         match.IsScored = true;
         await db.SaveChangesAsync();
-
-        try { await eloService.UpdateMatchRatingsAsync(match.Id); }
-        catch (Exception ex) { logger.LogWarning(ex, "ELO update failed for match {MatchId}.", match.Id); }
+        // ELO is calculated at tournament-end, not per-match.
     }
 
     public async Task CompleteRoundAsync(Guid roundId)

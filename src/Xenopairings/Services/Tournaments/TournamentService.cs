@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Xenopairings.Data;
 using Xenopairings.Models;
+using Xenopairings.Services.Elo;
 using Xenopairings.Services.Email;
 
 namespace Xenopairings.Services.Tournaments;
@@ -12,6 +13,7 @@ public class TournamentService(
     TokenGenerator tokenGenerator,
     IEmailSender emailSender,
     IOptions<EmailSettings> emailSettings,
+    IEloService eloService,
     ILogger<TournamentService> logger) : ITournamentService
 {
     private const int MaxSlugAttempts = 3;
@@ -161,6 +163,16 @@ public class TournamentService(
         t.Status = TournamentStatus.Ended;
         t.RegistrationOpen = false;
         await db.SaveChangesAsync();
+
+        // Process ELO for all scored matches in the tournament (snapshot model).
+        // Best-effort — don't fail the end-tournament action if ELO calculation errors.
+        try { await eloService.ProcessTournamentAsync(tournamentId); }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "ELO processing failed for tournament {TournamentId} — ratings may be incomplete.",
+                tournamentId);
+        }
     }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException ex) =>

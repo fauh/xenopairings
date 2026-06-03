@@ -25,7 +25,6 @@ public class StandingsServiceTests : IClassFixture<InMemoryDatabaseFixture>
             ctx, new StandingsService(ctx), new TeamStandingsService(ctx),
             new NullEmailSender(),
             Options.Create(new EmailSettings { BaseUrl = "https://test.example" }),
-            new NullEloService(),
             NullLogger<RoundService>.Instance);
     }
 

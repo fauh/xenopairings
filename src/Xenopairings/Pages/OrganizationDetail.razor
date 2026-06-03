@@ -84,6 +84,7 @@ else
                                 {
                                     <span>@(rating?.DisplayName ?? member.User.Email)</span>
                                 }
+                                @if (rating?.IsVip == true) { <span class="badge text-bg-success ms-1 small">$</span> }
                                 @if (member.UserId == _org.CreatedByUserId)
                                 {
                                     <span class="badge text-bg-secondary ms-1 small">founder</span>

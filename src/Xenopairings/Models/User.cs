@@ -6,4 +6,5 @@ public class User
     public string Email { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
+    public bool IsVip { get; set; }
 }

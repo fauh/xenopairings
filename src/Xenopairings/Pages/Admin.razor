@@ -2,13 +2,11 @@
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.Extensions.Options
-@using Xenopairings.Data
 @using Xenopairings.Models
 @using Xenopairings.Services.Auth
 @using Xenopairings.Services.Tournaments
-@using Microsoft.EntityFrameworkCore
 @inject ITournamentService TournamentService
-@inject AppDbContext Db
+@inject IAuthService AuthService
 @inject IOptions<AdminSettings> AdminOptions
 
 <PageTitle>Admin — Xenopairings</PageTitle>
@@ -29,14 +27,14 @@ else if (!_isAdmin)
 else
 {
     <h1>Admin panel</h1>
-    <p class="text-muted">Showing all data including private tournaments.</p>
+    <p class="text-muted">Full access — includes private tournaments.</p>
 
     @* ── Users ───────────────────────────────────────────────────────────────── *@
     <h2 class="h5 mt-4">Users (@_users.Count)</h2>
     <div class="table-responsive mb-4">
         <table class="table table-sm">
             <thead>
-                <tr><th>Email</th><th>Joined</th><th></th></tr>
+                <tr><th>Email</th><th>Joined</th><th>Badges</th><th></th></tr>
             </thead>
             <tbody>
                 @foreach (var u in _users)
@@ -49,14 +47,30 @@ else
                         <td>
                             @if (AdminOptions.Value.IsAdmin(u.Email))
                             {
-                                <span class="badge text-bg-danger">admin</span>
+                                <span class="badge text-bg-danger me-1">admin</span>
                             }
+                            @if (u.IsVip)
+                            {
+                                <span class="badge text-bg-success">$ VIP</span>
+                            }
+                        </td>
+                        <td>
+                            <button class="btn btn-sm @(u.IsVip ? "btn-outline-secondary" : "btn-outline-success")"
+                                    @onclick="() => ToggleVip(u)"
+                                    disabled="@_saving">
+                                @(u.IsVip ? "Revoke VIP" : "Grant VIP")
+                            </button>
                         </td>
                     </tr>
                 }
             </tbody>
         </table>
     </div>
+
+    @if (!string.IsNullOrEmpty(_statusMsg))
+    {
+        <div class="alert alert-info py-2 small mb-3">@_statusMsg</div>
+    }
 
     @* ── Tournaments ─────────────────────────────────────────────────────────── *@
     <h2 class="h5">All tournaments (@_tournaments.Count)</h2>
@@ -106,6 +120,8 @@ else
 
     private bool _isAdmin;
     private bool _loading = true;
+    private bool _saving;
+    private string? _statusMsg;
     private List<User> _users = [];
     private List<Tournament> _tournaments = [];
 
@@ -115,8 +131,19 @@ else
         _isAdmin = authState.User.IsInRole("Admin");
         if (!_isAdmin) { _loading = false; return; }
 
-        _users = await Db.Users.OrderBy(u => u.Email).ToListAsync();
+        _users = [.. await AuthService.ListAllAsync()];
         _tournaments = [.. await TournamentService.ListAllAsync()];
         _loading = false;
+    }
+
+    private async Task ToggleVip(User user)
+    {
+        _saving = true;
+        _statusMsg = null;
+        var newValue = !user.IsVip;
+        await AuthService.SetVipAsync(user.Id, newValue);
+        user.IsVip = newValue;
+        _statusMsg = $"{user.Email} is {(newValue ? "now VIP $" : "no longer VIP")}.";
+        _saving = false;
     }
 }

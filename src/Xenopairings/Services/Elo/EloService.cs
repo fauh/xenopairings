@@ -165,6 +165,9 @@ public sealed class EloService(AppDbContext db) : IEloService
 
         if (existing is not null) return existing;
 
+        // Inherit VIP status from the User record if one exists
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == normalised);
+
         var created = new PlayerRating
         {
             Id = Guid.NewGuid(),
@@ -173,6 +176,7 @@ public sealed class EloService(AppDbContext db) : IEloService
             Rating = InitialRating,
             GamesPlayed = 0,
             IsProfilePublic = true,
+            IsVip = user?.IsVip ?? false,
             CreatedAt = DateTimeOffset.UtcNow,
             LastUpdated = DateTimeOffset.UtcNow,
         };

@@ -16,4 +16,6 @@ public interface IAuthService
     Task<User?> LoginAsync(string email, string password);
 
     Task<User?> GetByEmailAsync(string email);
+    Task<IReadOnlyList<User>> ListAllAsync();
+    Task SetVipAsync(Guid userId, bool isVip);
 }

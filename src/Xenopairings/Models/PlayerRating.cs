@@ -23,4 +23,5 @@ public class PlayerRating
     /// The player still appears on the leaderboard with their rating.
     /// </summary>
     public bool IsProfilePublic { get; set; } = true;
+    public bool IsVip { get; set; }
 }

@@ -56,6 +56,7 @@ else
                                 <span class="text-muted">@rating.DisplayName</span>
                                 <span class="text-muted small ms-1" title="Private profile">🔒</span>
                             }
+                            @if (rating.IsVip) { <span class="badge text-bg-success ms-1 fw-normal small">$</span> }
                             @if (isMe) { <span class="badge text-bg-primary ms-1 fw-normal small">you</span> }
                         </td>
                         <td class="text-end">@((int)Math.Round(rating.Rating))</td>

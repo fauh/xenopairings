@@ -45,4 +45,25 @@ public sealed class AuthService(
         var normalised = email.Trim().ToLowerInvariant();
         return db.Users.FirstOrDefaultAsync(u => u.Email == normalised);
     }
+
+    public async Task<IReadOnlyList<User>> ListAllAsync()
+    {
+        var users = await db.Users.ToListAsync();
+        return [.. users.OrderBy(u => u.Email)];
+    }
+
+    public async Task SetVipAsync(Guid userId, bool isVip)
+    {
+        var user = await db.Users.FindAsync(userId);
+        if (user is null) return;
+        user.IsVip = isVip;
+
+        // Keep PlayerRating.IsVip in sync
+        var rating = await db.PlayerRatings
+            .FirstOrDefaultAsync(r => r.Email == user.Email);
+        if (rating is not null)
+            rating.IsVip = isVip;
+
+        await db.SaveChangesAsync();
+    }
 }

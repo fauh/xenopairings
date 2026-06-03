@@ -233,6 +233,8 @@ else
     private List<int> _allRoundNumbers = [];
     private Dictionary<string, PlayerRating> _playerRatings = [];
     private bool _loading = true;
+    private int _loadedRoundNumber = -1;  // tracks which round is currently displayed
+    private string? _sessionEmail;
 
     private Guid? _myPlayerId;
     private Match? _myMatch;
@@ -249,7 +251,25 @@ else
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateTask;
-        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+        _sessionEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+        await LoadAsync();
+    }
+
+    // Called by Blazor whenever route parameters change (soft nav between rounds).
+    protected override async Task OnParametersSetAsync()
+    {
+        if (RoundNumber != _loadedRoundNumber && !_loading)
+            await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        // Reset submission state when switching rounds
+        _myScore = _oppScore = null;
+        _iWentFirst = _iWasAttacker = null;
+        _submitError = null;
+        _submitSuccess = false;
 
         _tournament = await TournamentService.GetBySlugAsync(Slug);
         if (_tournament is null) { _loading = false; return; }
@@ -257,25 +277,28 @@ else
         var allRounds = await RoundService.ListByTournamentAsync(_tournament.Id);
         _allRoundNumbers = allRounds.Select(r => r.RoundNumber).OrderBy(n => n).ToList();
         _round = allRounds.FirstOrDefault(r => r.RoundNumber == RoundNumber);
-        if (_round is null) { _loading = false; return; }
+        if (_round is null) { _loading = false; _loadedRoundNumber = RoundNumber; return; }
 
         _matches = [.. await RoundService.GetMatchesAsync(_round.Id)];
 
-        if (email is not null)
+        if (_sessionEmail is not null)
         {
             var players = await PlayerService.ListByTournamentAsync(_tournament.Id);
             var me = players.FirstOrDefault(p =>
-                string.Equals(p.Email, email, StringComparison.OrdinalIgnoreCase));
+                string.Equals(p.Email, _sessionEmail, StringComparison.OrdinalIgnoreCase));
             _myPlayerId = me?.Id;
-            if (_myPlayerId.HasValue)
-                _myMatch = _matches.FirstOrDefault(m =>
-                    m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId);
+            _myMatch = _myPlayerId.HasValue
+                ? _matches.FirstOrDefault(m => m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId)
+                : null;
         }
 
-        // Build email → PlayerRating map for player name links
-        var ratingList = await EloService.GetLeaderboardAsync();
-        _playerRatings = ratingList.ToDictionary(r => r.Email, StringComparer.OrdinalIgnoreCase);
+        if (_playerRatings.Count == 0)
+        {
+            var ratingList = await EloService.GetLeaderboardAsync();
+            _playerRatings = ratingList.ToDictionary(r => r.Email, StringComparer.OrdinalIgnoreCase);
+        }
 
+        _loadedRoundNumber = RoundNumber;
         _loading = false;
     }
 

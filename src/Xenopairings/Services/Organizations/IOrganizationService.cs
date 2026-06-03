@@ -12,4 +12,7 @@ public interface IOrganizationService
     /// <summary>Adds the user to the organization. No-op if already a member.</summary>
     Task JoinAsync(Guid organizationId, Guid userId);
     Task LeaveAsync(Guid organizationId, Guid userId);
+    Task DeleteAsync(Guid organizationId);
+    /// <summary>Returns all organizations (admin use). Includes Members.</summary>
+    Task<IReadOnlyList<Organization>> ListAllAsync();
 }

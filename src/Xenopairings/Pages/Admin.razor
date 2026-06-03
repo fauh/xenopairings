@@ -4,9 +4,11 @@
 @using Microsoft.Extensions.Options
 @using Xenopairings.Models
 @using Xenopairings.Services.Auth
+@using Xenopairings.Services.Organizations
 @using Xenopairings.Services.Tournaments
 @inject ITournamentService TournamentService
 @inject IAuthService AuthService
+@inject IOrganizationService OrgService
 @inject IOptions<AdminSettings> AdminOptions
 
 <PageTitle>Admin — Xenopairings</PageTitle>
@@ -113,6 +115,48 @@ else
             </tbody>
         </table>
     </div>
+    @* ── Organizations ─────────────────────────────────────────────────────── *@
+    <h2 class="h5 mt-2">All organizations (@_orgs.Count)</h2>
+    @if (!_orgs.Any())
+    {
+        <p class="text-muted small">No organizations yet.</p>
+    }
+    else
+    {
+        <div class="table-responsive mb-4">
+            <table class="table table-sm">
+                <thead>
+                    <tr><th>Name</th><th>Members</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var org in _orgs)
+                    {
+                        <tr>
+                            <td><a href="/organizations/@org.Id">@org.Name</a></td>
+                            <td class="text-muted small">@org.Members.Count</td>
+                            <td>
+                                @if (!_confirmDeleteOrg.Contains(org.Id))
+                                {
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            @onclick="() => _confirmDeleteOrg.Add(org.Id)"
+                                            disabled="@_saving">Delete</button>
+                                }
+                                else
+                                {
+                                    <span class="text-danger small me-2">Delete "@org.Name"?</span>
+                                    <button class="btn btn-sm btn-danger me-1"
+                                            @onclick="() => DeleteOrg(org.Id)"
+                                            disabled="@_saving">Yes</button>
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            @onclick="() => _confirmDeleteOrg.Remove(org.Id)">No</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
 }
 
 @code {
@@ -124,6 +168,8 @@ else
     private string? _statusMsg;
     private List<User> _users = [];
     private List<Tournament> _tournaments = [];
+    private List<Organization> _orgs = [];
+    private HashSet<Guid> _confirmDeleteOrg = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -133,7 +179,18 @@ else
 
         _users = [.. await AuthService.ListAllAsync()];
         _tournaments = [.. await TournamentService.ListAllAsync()];
+        _orgs = [.. await OrgService.ListAllAsync()];
         _loading = false;
+    }
+
+    private async Task DeleteOrg(Guid orgId)
+    {
+        _saving = true;
+        _confirmDeleteOrg.Remove(orgId);
+        await OrgService.DeleteAsync(orgId);
+        _orgs = [.. await OrgService.ListAllAsync()];
+        _statusMsg = "Organization deleted.";
+        _saving = false;
     }
 
     private async Task ToggleVip(User user)

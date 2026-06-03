@@ -67,6 +67,22 @@ public sealed class OrganizationService(AppDbContext db, TokenGenerator tokenGen
         await db.SaveChangesAsync();
     }
 
+    public async Task<IReadOnlyList<Organization>> ListAllAsync()
+    {
+        var orgs = await db.Organizations
+            .Include(o => o.Members)
+            .ToListAsync();
+        return [.. orgs.OrderBy(o => o.Name)];
+    }
+
+    public async Task DeleteAsync(Guid organizationId)
+    {
+        var org = await db.Organizations.FindAsync(organizationId);
+        if (org is null) return;
+        db.Organizations.Remove(org);
+        await db.SaveChangesAsync();
+    }
+
     public async Task LeaveAsync(Guid organizationId, Guid userId)
     {
         var member = await db.OrganizationMembers

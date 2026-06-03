@@ -9,6 +9,10 @@ public interface ITournamentService
     Task<Tournament?> GetBySlugAsync(string slug);
     Task<Tournament?> GetByManageTokenAsync(string token);
     Task SetRegistrationOpenAsync(Guid tournamentId, bool open);
+    /// <summary>Transitions Upcoming → InProgress; auto-closes registration.</summary>
+    Task StartAsync(Guid tournamentId);
+    /// <summary>Transitions any non-Ended status → Ended; auto-closes registration.</summary>
+    Task EndAsync(Guid tournamentId);
     /// <summary>Returns all non-private tournaments, newest first.</summary>
     Task<IReadOnlyList<Tournament>> ListPublicAsync();
     /// <summary>Returns tournaments where OrganizerEmail matches, newest first.</summary>

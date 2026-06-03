@@ -47,7 +47,7 @@ else
             {
                 <span> · Registration closed</span>
             }
-            @if (_tournament.IsClosed)
+            @if (_tournament.Status == TournamentStatus.Ended)
             {
                 <span> · Tournament closed</span>
             }
@@ -55,7 +55,7 @@ else
     </div>
 
     @* ── Registration ──────────────────────────────────────────────────────────── *@
-    @if (_tournament.RegistrationOpen && !_tournament.IsClosed && !_myRegistrationSuccess)
+    @if (_tournament.RegistrationOpen && _tournament.Status == TournamentStatus.Upcoming && !_myRegistrationSuccess)
     {
         <div class="card mb-4" style="max-width:500px">
             <div class="card-body">

@@ -32,17 +32,57 @@ else
         <a href="/t/@_tournament.Slug" class="btn btn-outline-secondary btn-sm">Public view</a>
     </div>
 
-    @* ── Registration ──────────────────────────────────────────────────────────── *@
+    @* ── Tournament status + lifecycle ─────────────────────────────────────────── *@
     <div class="card mb-4">
         <div class="card-body">
-            <h2 class="h5 card-title">Registration</h2>
-            <p class="card-text text-muted">
-                Status: <strong>@(_tournament.RegistrationOpen ? "Open" : "Closed")</strong>
+            <h2 class="h5 card-title">Event status</h2>
+            <p class="card-text text-muted mb-3">
+                @(_tournament.Status switch {
+                    TournamentStatus.Upcoming    => "Upcoming — registration may be open or closed.",
+                    TournamentStatus.InProgress  => "In Progress — rounds are being played.",
+                    TournamentStatus.Ended       => "Ended — this event is complete.",
+                    _                            => ""
+                })
                 &nbsp;·&nbsp; @_players.Count(p => !p.IsDropped) / @_tournament.MaxPlayers players
             </p>
-            <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleRegistration" disabled="@_saving">
-                @(_tournament.RegistrationOpen ? "Close registration" : "Open registration")
-            </button>
+
+            @* Registration toggle — only when Upcoming *@
+            @if (_tournament.Status == TournamentStatus.Upcoming)
+            {
+                <button class="btn btn-outline-secondary btn-sm me-2"
+                        @onclick="ToggleRegistration" disabled="@_saving">
+                    @(_tournament.RegistrationOpen ? "Close registration" : "Open registration")
+                </button>
+            }
+
+            @* Start event — Upcoming only *@
+            @if (_tournament.Status == TournamentStatus.Upcoming)
+            {
+                <button class="btn btn-success btn-sm me-2"
+                        @onclick="StartEvent" disabled="@_saving">
+                    ▶ Start event
+                </button>
+            }
+
+            @* End event — InProgress or Upcoming (organizer can end early) *@
+            @if (_tournament.Status != TournamentStatus.Ended)
+            {
+                @if (!_confirmEnd)
+                {
+                    <button class="btn btn-outline-danger btn-sm"
+                            @onclick="() => _confirmEnd = true" disabled="@_saving">
+                        End event
+                    </button>
+                }
+                else
+                {
+                    <span class="text-danger me-2 small">End this event? This cannot be undone.</span>
+                    <button class="btn btn-danger btn-sm me-2"
+                            @onclick="EndEvent" disabled="@_saving">Confirm end</button>
+                    <button class="btn btn-outline-secondary btn-sm"
+                            @onclick="() => _confirmEnd = false">Cancel</button>
+                }
+            }
         </div>
     </div>
 
@@ -226,7 +266,7 @@ else
     {
         @if ((_rounds.Count + 1) <= _tournament.NumberOfRounds
             && _players.Count(p => !p.IsDropped) >= 2
-            && !_tournament.IsClosed)
+            && _tournament.Status != TournamentStatus.Ended)
         {
             <div class="card mb-4">
                 <div class="card-body">
@@ -280,6 +320,7 @@ else
     private Dictionary<Guid, bool?> _attackerInputs = [];
     private bool _loading = true;
     private bool _saving;
+    private bool _confirmEnd;
     private string? _statusMessage;
     private string? _errorMessage;
     private string? _newMissionLayout;
@@ -316,6 +357,39 @@ else
             var matches = await RoundService.GetMatchesAsync(round.Id);
             _matchesByRound[round.Id] = [.. matches];
         }
+    }
+
+    private async Task StartEvent()
+    {
+        if (_tournament is null) return;
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            await TournamentService.StartAsync(_tournament.Id);
+            _tournament.Status = TournamentStatus.InProgress;
+            _tournament.RegistrationOpen = false;
+            _statusMessage = "Event started. Registration is now closed.";
+        }
+        catch (Exception ex) { _errorMessage = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private async Task EndEvent()
+    {
+        if (_tournament is null) return;
+        _saving = true;
+        _confirmEnd = false;
+        _errorMessage = null;
+        try
+        {
+            await TournamentService.EndAsync(_tournament.Id);
+            _tournament.Status = TournamentStatus.Ended;
+            _tournament.RegistrationOpen = false;
+            _statusMessage = "Event ended.";
+        }
+        catch (Exception ex) { _errorMessage = ex.Message; }
+        finally { _saving = false; }
     }
 
     private async Task ToggleRegistration()

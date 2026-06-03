@@ -42,17 +42,24 @@ else
                             <td class="text-nowrap">@t.StartsAt.ToLocalTime().ToString("d MMM yyyy")</td>
                             <td>@t.NumberOfRounds rounds</td>
                             <td>
-                                @if (t.IsClosed)
+                                @switch (t.Status)
                                 {
-                                    <span class="badge text-bg-secondary">Closed</span>
-                                }
-                                else if (t.RegistrationOpen)
-                                {
-                                    <span class="badge text-bg-success">Open</span>
-                                }
-                                else
-                                {
-                                    <span class="badge text-bg-warning">Closed</span>
+                                    case TournamentStatus.Ended:
+                                        <span class="badge text-bg-secondary">Ended</span>
+                                        break;
+                                    case TournamentStatus.InProgress:
+                                        <span class="badge text-bg-primary">In Progress</span>
+                                        break;
+                                    default:
+                                        @if (t.RegistrationOpen)
+                                        {
+                                            <span class="badge text-bg-success">Reg. Open</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge text-bg-warning">Reg. Closed</span>
+                                        }
+                                        break;
                                 }
                             </td>
                             <td>

@@ -11,7 +11,7 @@ public class Tournament
     public int NumberOfRounds { get; set; }
     public int MaxPlayers { get; set; }
     public bool IsPrivate { get; set; }
-    public bool IsClosed { get; set; }
+    public TournamentStatus Status { get; set; } = TournamentStatus.Upcoming;
     public string OrganizerName { get; set; } = string.Empty;
     public string OrganizerEmail { get; set; } = string.Empty;
     public string ManageToken { get; set; } = string.Empty;

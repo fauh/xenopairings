@@ -36,6 +36,7 @@ public class TournamentService(
                 ManageToken = tokenGenerator.RandomUrlSafeString(22),
                 IsPrivate = request.IsPrivate,
                 RegistrationOpen = request.RegistrationOpen,
+                Status = TournamentStatus.Upcoming,
                 ScoringSystem = request.ScoringSystem,
                 IsTeamEvent = request.IsTeamEvent,
                 TeamSize = request.IsTeamEvent ? request.TeamSize : null,
@@ -123,6 +124,28 @@ public class TournamentService(
         var tournament = await db.Tournaments.FindAsync(tournamentId);
         if (tournament is null) return;
         tournament.RegistrationOpen = open;
+        await db.SaveChangesAsync();
+    }
+
+    public async Task StartAsync(Guid tournamentId)
+    {
+        var t = await db.Tournaments.FindAsync(tournamentId)
+            ?? throw new InvalidOperationException("Tournament not found.");
+        if (t.Status != TournamentStatus.Upcoming)
+            throw new InvalidOperationException("Only an upcoming tournament can be started.");
+        t.Status = TournamentStatus.InProgress;
+        t.RegistrationOpen = false;
+        await db.SaveChangesAsync();
+    }
+
+    public async Task EndAsync(Guid tournamentId)
+    {
+        var t = await db.Tournaments.FindAsync(tournamentId)
+            ?? throw new InvalidOperationException("Tournament not found.");
+        if (t.Status == TournamentStatus.Ended)
+            throw new InvalidOperationException("Tournament is already ended.");
+        t.Status = TournamentStatus.Ended;
+        t.RegistrationOpen = false;
         await db.SaveChangesAsync();
     }
 

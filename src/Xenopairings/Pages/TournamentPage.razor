@@ -123,6 +123,21 @@ else
         </div>
     }
 
+    @* ── Round navigation ────────────────────────────────────────────────────────── *@
+    @if (_allRounds.Count > 0)
+    {
+        <div class="d-flex gap-1 mt-4 flex-wrap">
+            @foreach (var (r, _) in _allRounds)
+            {
+                var isCurrent = r.Id == _currentRound?.Id;
+                <a href="/t/@_tournament!.Slug/round/@(r.RoundNumber)"
+                   class="btn btn-sm @(isCurrent ? "btn-primary" : "btn-outline-secondary")">
+                    R@(r.RoundNumber)
+                </a>
+            }
+        </div>
+    }
+
     @* ── Current round ───────────────────────────────────────────────────────────── *@
     @if (_currentRound is not null)
     {
@@ -498,17 +513,11 @@ else
     private RenderFragment PlayerNameCell(Player? player) => __builder =>
     {
         if (player is null) { __builder.AddContent(0, "—"); return; }
-        if (player.Email is not null && _playerRatings.TryGetValue(player.Email, out var r))
-        {
-            __builder.OpenElement(0, "a");
-            __builder.AddAttribute(1, "href", $"/player/{r.Id}");
-            __builder.AddContent(2, player.Name);
-            __builder.CloseElement();
-        }
-        else
-        {
-            __builder.AddContent(0, player.Name);
-        }
+        // Always link to the tournament-scoped player profile; from there they can reach global ELO.
+        __builder.OpenElement(0, "a");
+        __builder.AddAttribute(1, "href", $"/t/{Slug}/player/{player.Id}");
+        __builder.AddContent(2, player.Name);
+        __builder.CloseElement();
     };
 
     private async Task SubmitMatchResult()

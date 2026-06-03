@@ -1,0 +1,238 @@
+@page "/t/{Slug}/player/{PlayerId:guid}"
+@using Xenopairings.Models
+@using Xenopairings.Services.Tournaments
+@using Xenopairings.Services.Players
+@using Xenopairings.Services.Rounds
+@using Xenopairings.Services.Elo
+@using Xenopairings.Services.Pairings
+@inject ITournamentService TournamentService
+@inject IPlayerService PlayerService
+@inject IRoundService RoundService
+@inject IEloService EloService
+
+<PageTitle>@(_player?.Name ?? "Player") — Xenopairings</PageTitle>
+
+@if (_loading)
+{
+    <LoadingSpinner />
+}
+else if (_tournament is null || _player is null)
+{
+    <div class="empty-state">
+        <div class="empty-state-icon">🎲</div>
+        <h3>Player not found</h3>
+        <a href="/t/@Slug" class="btn btn-outline-secondary mt-2">Back to tournament</a>
+    </div>
+}
+else
+{
+    @* ── Breadcrumb ──────────────────────────────────────────────────────────── *@
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/t/@_tournament.Slug">@_tournament.Title</a></li>
+            <li class="breadcrumb-item active">@_player.Name</li>
+        </ol>
+    </nav>
+
+    @* ── Header ──────────────────────────────────────────────────────────────── *@
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-4">
+        <div>
+            <h1 class="mb-0">@_player.Name</h1>
+            @if (!string.IsNullOrWhiteSpace(_player.ArmyFaction))
+            {
+                <p class="text-muted mb-0">@_player.ArmyFaction</p>
+            }
+            @if (_player.IsDropped)
+            {
+                <span class="badge text-bg-danger mt-1">Dropped</span>
+            }
+        </div>
+        @if (_globalRating is not null && _globalRating.IsProfilePublic)
+        {
+            <a href="/player/@_globalRating.Id" class="btn btn-outline-secondary btn-sm align-self-start">
+                Global profile &amp; ELO →
+            </a>
+        }
+        else if (_globalRating is not null)
+        {
+            <a href="/player/@_globalRating.Id" class="btn btn-outline-secondary btn-sm align-self-start">
+                ELO profile →
+            </a>
+        }
+    </div>
+
+    @* ── Army list ────────────────────────────────────────────────────────────── *@
+    @if (!string.IsNullOrWhiteSpace(_player.ArmyList))
+    {
+        <div class="mb-4">
+            <h2 class="h6">Army list</h2>
+            <pre class="border rounded p-3 bg-body-secondary small" style="white-space:pre-wrap;max-height:300px;overflow-y:auto">@_player.ArmyList</pre>
+        </div>
+    }
+
+    @* ── Round performance ────────────────────────────────────────────────────── *@
+    <h2 class="h5">Round performance</h2>
+    @if (!_roundRows.Any())
+    {
+        <p class="text-muted">No rounds played yet.</p>
+    }
+    else
+    {
+        <div class="table-responsive mb-4">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Round</th>
+                        <th>Opponent</th>
+                        <th>Table</th>
+                        <th>First turn</th>
+                        <th>Role</th>
+                        <th>Score</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _roundRows)
+                    {
+                        <tr>
+                            <td>
+                                <a href="/t/@_tournament.Slug/round/@(row.RoundNumber)">
+                                    R@(row.RoundNumber)
+                                </a>
+                            </td>
+                            <td>
+                                @if (row.Opponent is not null)
+                                {
+                                    <a href="/t/@_tournament.Slug/player/@row.Opponent.Id">@row.Opponent.Name</a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">— (bye)</span>
+                                }
+                            </td>
+                            <td>@row.TableNumber</td>
+                            <td class="text-muted small">
+                                <span>@(row.WentFirst == true ? "Yes" : row.WentFirst == false ? "No" : "—")</span>
+                            </td>
+                            <td class="text-muted small">
+                                <span>@(row.IsAttacker == true ? "Attacker" : row.IsAttacker == false ? "Defender" : "—")</span>
+                            </td>
+                            <td>
+                                @if (row.IsScored)
+                                {
+                                    <span>@row.MyScore — @row.OpponentScore</span>
+                                    @if (_tournament.ScoringSystem == ScoringSystem.Wtc && row.Opponent is not null)
+                                    {
+                                        var (gp1, gp2) = WtcScoring.ConvertToGamePoints(row.MyScore, row.OpponentScore);
+                                        <span class="text-muted small ms-1">(@(gp1)GP)</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="text-muted">pending</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!row.IsScored)
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                                else if (row.Opponent is null)
+                                {
+                                    <span class="text-muted">bye</span>
+                                }
+                                else
+                                {
+                                    var (label, css) = ResultLabel(row.MyScore, row.OpponentScore, _tournament.ScoringSystem);
+                                    <span class="fw-semibold @css">@label</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = string.Empty;
+    [Parameter] public Guid PlayerId { get; set; }
+
+    private Tournament? _tournament;
+    private Player? _player;
+    private PlayerRating? _globalRating;
+    private List<RoundRow> _roundRows = [];
+    private bool _loading = true;
+
+    private record RoundRow(
+        int RoundNumber, int TableNumber,
+        Player? Opponent,
+        bool? WentFirst, bool? IsAttacker,
+        int MyScore, int OpponentScore,
+        bool IsScored);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tournament = await TournamentService.GetBySlugAsync(Slug);
+        if (_tournament is null) { _loading = false; return; }
+
+        var players = await PlayerService.ListByTournamentAsync(_tournament.Id);
+        _player = players.FirstOrDefault(p => p.Id == PlayerId);
+        if (_player is null) { _loading = false; return; }
+
+        // Try to find global ELO profile
+        if (!string.IsNullOrWhiteSpace(_player.Email))
+            _globalRating = await EloService.GetByEmailAsync(_player.Email);
+
+        // Build per-round performance
+        var rounds = await RoundService.ListByTournamentAsync(_tournament.Id);
+        var playerMap = players.ToDictionary(p => p.Id);
+
+        foreach (var round in rounds.OrderBy(r => r.RoundNumber))
+        {
+            var matches = await RoundService.GetMatchesAsync(round.Id);
+            var match = matches.FirstOrDefault(m =>
+                m.Player1Id == PlayerId || m.Player2Id == PlayerId);
+            if (match is null) continue;
+
+            var isP1 = match.Player1Id == PlayerId;
+            var opponentId = isP1 ? match.Player2Id : match.Player1Id;
+            var opponent = opponentId.HasValue ? playerMap.GetValueOrDefault(opponentId.Value) : null;
+            var myScore  = isP1 ? (match.Player1Score ?? 0) : (match.Player2Score ?? 0);
+            var oppScore = isP1 ? (match.Player2Score ?? 0) : (match.Player1Score ?? 0);
+            var wentFirst = isP1 ? match.Player1WentFirst : (match.Player1WentFirst.HasValue ? !match.Player1WentFirst : null);
+            var isAttacker = isP1 ? match.Player1IsAttacker : (match.Player1IsAttacker.HasValue ? !match.Player1IsAttacker : null);
+
+            _roundRows.Add(new RoundRow(
+                RoundNumber: round.RoundNumber,
+                TableNumber: match.TableNumber,
+                Opponent: opponent,
+                WentFirst: wentFirst,
+                IsAttacker: isAttacker,
+                MyScore: myScore,
+                OpponentScore: oppScore,
+                IsScored: match.IsScored));
+        }
+
+        _loading = false;
+    }
+
+    private static (string label, string css) ResultLabel(int myScore, int oppScore, ScoringSystem scoring)
+    {
+        double outcome;
+        if (scoring == ScoringSystem.Wtc)
+        {
+            var (gp1, _) = WtcScoring.ConvertToGamePoints(myScore, oppScore);
+            outcome = gp1 / 20.0;
+        }
+        else
+        {
+            outcome = myScore > oppScore ? 1.0 : myScore < oppScore ? 0.0 : 0.5;
+        }
+
+        if (outcome > 0.5) return ("Win",  "text-success");
+        if (outcome < 0.5) return ("Loss", "text-danger");
+        return ("Draw", "text-info");
+    }
+}

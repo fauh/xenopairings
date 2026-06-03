@@ -409,14 +409,10 @@ public sealed class RoundService(
         match.IsScored = true;
         await db.SaveChangesAsync();
 
-        // Update ELO ratings (fire-and-forget — don't fail score entry on ELO error)
-        _ = Task.Run(() => UpdateEloSafe(match.Id));
-    }
-
-    private async Task UpdateEloSafe(Guid matchId)
-    {
-        try { await eloService.UpdateMatchRatingsAsync(matchId); }
-        catch (Exception ex) { logger.LogWarning(ex, "ELO update failed for match {MatchId}.", matchId); }
+        // ELO update — awaited directly. eloService is a scoped DbContext-backed service;
+        // Task.Run would run after the scope is disposed and the DbContext torn down.
+        try { await eloService.UpdateMatchRatingsAsync(match.Id); }
+        catch (Exception ex) { logger.LogWarning(ex, "ELO update failed for match {MatchId}.", match.Id); }
     }
 
     public async Task SubmitMatchResultAsync(
@@ -460,7 +456,8 @@ public sealed class RoundService(
         match.IsScored = true;
         await db.SaveChangesAsync();
 
-        _ = Task.Run(() => UpdateEloSafe(match.Id));
+        try { await eloService.UpdateMatchRatingsAsync(match.Id); }
+        catch (Exception ex) { logger.LogWarning(ex, "ELO update failed for match {MatchId}.", match.Id); }
     }
 
     public async Task CompleteRoundAsync(Guid roundId)

@@ -1,0 +1,330 @@
+@page "/t/{Slug}/round/{RoundNumber:int}"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Xenopairings.Models
+@using Xenopairings.Services.Tournaments
+@using Xenopairings.Services.Players
+@using Xenopairings.Services.Rounds
+@using Xenopairings.Services.Elo
+@using Xenopairings.Services.Pairings
+@inject ITournamentService TournamentService
+@inject IPlayerService PlayerService
+@inject IRoundService RoundService
+@inject IEloService EloService
+@inject NavigationManager Nav
+
+<PageTitle>Round @RoundNumber — Xenopairings</PageTitle>
+
+@if (_loading)
+{
+    <LoadingSpinner />
+}
+else if (_tournament is null || _round is null)
+{
+    <div class="empty-state">
+        <div class="empty-state-icon">🎲</div>
+        <h3>Round not found</h3>
+        <a href="/" class="btn btn-outline-secondary mt-2">Home</a>
+    </div>
+}
+else
+{
+    @* ── Header ─────────────────────────────────────────────────────────────── *@
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/t/@_tournament.Slug">@_tournament.Title</a></li>
+            <li class="breadcrumb-item active">Round @_round.RoundNumber</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex align-items-center gap-2 mb-1">
+        <h1 class="mb-0">Round @_round.RoundNumber</h1>
+        @if (_round.IsComplete)
+        {
+            <span class="badge text-bg-success">Complete</span>
+        }
+        else
+        {
+            <span class="badge text-bg-warning">In progress</span>
+        }
+    </div>
+    @if (!string.IsNullOrWhiteSpace(_round.MissionLayout))
+    {
+        <p class="text-muted">@_round.MissionLayout</p>
+    }
+
+    @* ── Round navigation ────────────────────────────────────────────────────── *@
+    @if (_allRoundNumbers.Count > 1)
+    {
+        <div class="d-flex gap-1 mb-4 flex-wrap">
+            @foreach (var n in _allRoundNumbers)
+            {
+                <a href="/t/@_tournament.Slug/round/@n"
+                   class="btn btn-sm @(n == RoundNumber ? "btn-primary" : "btn-outline-secondary")">
+                    R@n
+                </a>
+            }
+        </div>
+    }
+
+    @* ── Score submission card (logged-in player's unscored match) ───────────── *@
+    @if (_myMatch is not null && !_myMatch.IsScored && _myMatch.Player2Id is not null)
+    {
+        var opponent = _myMatch.Player1Id == _myPlayerId ? _myMatch.Player2 : _myMatch.Player1;
+        <div class="card mb-4 border-primary" style="max-width:480px">
+            <div class="card-header bg-primary text-white">
+                Submit your result — Table @_myMatch.TableNumber
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">vs <strong>@(opponent?.Name ?? "opponent")</strong></p>
+
+                <div class="row g-2 mb-3">
+                    <div class="col">
+                        <label class="form-label small">Your score</label>
+                        <input type="number" class="form-control" min="0"
+                               @bind="_myScore" placeholder="0" />
+                    </div>
+                    <div class="col">
+                        <label class="form-label small">Opponent score</label>
+                        <input type="number" class="form-control" min="0"
+                               @bind="_oppScore" placeholder="0" />
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-6">
+                        <label class="form-label small">First turn</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="ft"
+                                   id="ft-me" @onchange="() => _iWentFirst = true"
+                                   checked="@(_iWentFirst == true)" />
+                            <label class="form-check-label small" for="ft-me">I went first</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="ft"
+                                   id="ft-them" @onchange="() => _iWentFirst = false"
+                                   checked="@(_iWentFirst == false)" />
+                            <label class="form-check-label small" for="ft-them">They went first</label>
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label small">Role</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="role"
+                                   id="role-atk" @onchange="() => _iWasAttacker = true"
+                                   checked="@(_iWasAttacker == true)" />
+                            <label class="form-check-label small" for="role-atk">Attacker</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="role"
+                                   id="role-def" @onchange="() => _iWasAttacker = false"
+                                   checked="@(_iWasAttacker == false)" />
+                            <label class="form-check-label small" for="role-def">Defender</label>
+                        </div>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_submitError))
+                {
+                    <div class="alert alert-danger py-2 small">@_submitError</div>
+                }
+                @if (_submitSuccess)
+                {
+                    <div class="alert alert-success py-2 small">Result submitted!</div>
+                }
+
+                <button class="btn btn-primary"
+                        @onclick="SubmitResult"
+                        disabled="@(_myScore is null || _oppScore is null
+                                    || _iWentFirst is null || _iWasAttacker is null || _busy)">
+                    Submit result
+                </button>
+            </div>
+        </div>
+    }
+    else if (_myMatch is not null && _myMatch.IsScored)
+    {
+        var myScore  = _myMatch.Player1Id == _myPlayerId ? _myMatch.Player1Score : _myMatch.Player2Score;
+        var oppScore = _myMatch.Player1Id == _myPlayerId ? _myMatch.Player2Score : _myMatch.Player1Score;
+        <div class="alert alert-success mb-4 py-2">
+            <strong>Your result is recorded:</strong> @myScore — @oppScore
+        </div>
+    }
+
+    @* ── Pairings table ───────────────────────────────────────────────────────── *@
+    @if (!_matches.Any())
+    {
+        <p class="text-muted">No pairings for this round yet.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Table</th>
+                        <th>Player 1</th>
+                        <th>Player 2</th>
+                        <th>First turn</th>
+                        <th>Attacker</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var match in OrderedMatches())
+                    {
+                        var isMyRow = match.Id == _myMatch?.Id;
+                        <tr class="@(isMyRow ? "table-primary fw-semibold" : "")">
+                            <td>
+                                @match.TableNumber
+                                @if (isMyRow) { <span class="badge text-bg-primary ms-1 fw-normal small">you</span> }
+                            </td>
+                            <td>@PlayerLink(match.Player1)</td>
+                            <td>
+                                @if (match.Player2Id is null)
+                                {
+                                    <span class="text-muted">— (bye)</span>
+                                }
+                                else
+                                {
+                                    @PlayerLink(match.Player2)
+                                }
+                            </td>
+                            <td class="text-muted small fw-normal">
+                                @if (match.Player1WentFirst == true) { @(match.Player1?.Name ?? "P1") }
+                                else if (match.Player1WentFirst == false) { @(match.Player2?.Name ?? "P2") }
+                                else { <span>—</span> }
+                            </td>
+                            <td class="text-muted small fw-normal">
+                                @if (match.Player1IsAttacker == true) { @(match.Player1?.Name ?? "P1") }
+                                else if (match.Player1IsAttacker == false) { @(match.Player2?.Name ?? "P2") }
+                                else { <span>—</span> }
+                            </td>
+                            <td class="fw-normal">
+                                @if (match.Player2Id is null)
+                                {
+                                    <span class="text-muted">bye</span>
+                                }
+                                else if (match.IsScored)
+                                {
+                                    <span>@match.Player1Score — @match.Player2Score</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">pending</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = string.Empty;
+    [Parameter] public int RoundNumber { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private Tournament? _tournament;
+    private Round? _round;
+    private List<Match> _matches = [];
+    private List<int> _allRoundNumbers = [];
+    private Dictionary<string, PlayerRating> _playerRatings = [];
+    private bool _loading = true;
+
+    private Guid? _myPlayerId;
+    private Match? _myMatch;
+
+    // Submission state
+    private int? _myScore;
+    private int? _oppScore;
+    private bool? _iWentFirst;
+    private bool? _iWasAttacker;
+    private bool _busy;
+    private string? _submitError;
+    private bool _submitSuccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateTask;
+        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+
+        _tournament = await TournamentService.GetBySlugAsync(Slug);
+        if (_tournament is null) { _loading = false; return; }
+
+        var allRounds = await RoundService.ListByTournamentAsync(_tournament.Id);
+        _allRoundNumbers = allRounds.Select(r => r.RoundNumber).OrderBy(n => n).ToList();
+        _round = allRounds.FirstOrDefault(r => r.RoundNumber == RoundNumber);
+        if (_round is null) { _loading = false; return; }
+
+        _matches = [.. await RoundService.GetMatchesAsync(_round.Id)];
+
+        if (email is not null)
+        {
+            var players = await PlayerService.ListByTournamentAsync(_tournament.Id);
+            var me = players.FirstOrDefault(p =>
+                string.Equals(p.Email, email, StringComparison.OrdinalIgnoreCase));
+            _myPlayerId = me?.Id;
+            if (_myPlayerId.HasValue)
+                _myMatch = _matches.FirstOrDefault(m =>
+                    m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId);
+        }
+
+        // Build email → PlayerRating map for player name links
+        var ratingList = await EloService.GetLeaderboardAsync();
+        _playerRatings = ratingList.ToDictionary(r => r.Email, StringComparer.OrdinalIgnoreCase);
+
+        _loading = false;
+    }
+
+    private IEnumerable<Match> OrderedMatches() =>
+        _myMatch is not null
+            ? _matches.OrderBy(m => m.Id == _myMatch.Id ? 0 : 1).ThenBy(m => m.TableNumber)
+            : _matches.OrderBy(m => m.TableNumber);
+
+    private RenderFragment PlayerLink(Player? player) => __builder =>
+    {
+        if (player is null) { __builder.AddContent(0, "—"); return; }
+        if (player.Email is not null && _playerRatings.TryGetValue(player.Email, out var rating))
+        {
+            __builder.OpenElement(0, "a");
+            __builder.AddAttribute(1, "href", $"/player/{rating.Id}");
+            __builder.AddContent(2, player.Name);
+            __builder.CloseElement();
+        }
+        else
+        {
+            __builder.AddContent(0, player.Name);
+        }
+    };
+
+    private async Task SubmitResult()
+    {
+        if (_myMatch is null || _myPlayerId is null) return;
+        if (_myScore is null || _oppScore is null || _iWentFirst is null || _iWasAttacker is null) return;
+
+        _busy = true;
+        _submitError = null;
+        try
+        {
+            await RoundService.SubmitMatchResultAsync(
+                _myMatch.Id, _myPlayerId.Value,
+                _myScore.Value, _oppScore.Value,
+                _iWentFirst.Value, _iWasAttacker.Value);
+            _matches = [.. await RoundService.GetMatchesAsync(_round!.Id)];
+            _myMatch = _matches.FirstOrDefault(m =>
+                m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId);
+            _submitSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            _submitError = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

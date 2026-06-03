@@ -7,10 +7,12 @@
 @using Xenopairings.Services.Rounds
 @using Xenopairings.Services.Standings
 @using Xenopairings.Services.Pairings
+@using Xenopairings.Services.Elo
 @inject ITournamentService TournamentService
 @inject IPlayerService PlayerService
 @inject IRoundService RoundService
 @inject StandingsService StandingsService
+@inject IEloService EloService
 @inject NavigationManager Nav
 
 <PageTitle>@(_tournament?.Title ?? "Tournament") — Xenopairings</PageTitle>
@@ -131,7 +133,9 @@ else
 
         <div class="mt-4">
             <h2 class="h5 d-flex align-items-center gap-2">
-                Round @round.RoundNumber
+                <a href="/t/@_tournament!.Slug/round/@round.RoundNumber" class="text-decoration-none text-body">
+                    Round @round.RoundNumber
+                </a>
                 @if (!string.IsNullOrWhiteSpace(round.MissionLayout))
                 {
                     <small class="text-muted fw-normal">@round.MissionLayout</small>
@@ -144,6 +148,8 @@ else
                 {
                     <span class="badge text-bg-warning">In progress</span>
                 }
+                <a href="/t/@_tournament!.Slug/round/@round.RoundNumber"
+                   class="btn btn-outline-secondary btn-sm ms-auto">View →</a>
             </h2>
 
             @* ── Submit form: only for logged-in player's unscored match in current round ── *@
@@ -251,8 +257,8 @@ else
                                         @match.TableNumber
                                         @if (isMyRow) { <span class="badge text-bg-primary ms-1 fw-normal small">you</span> }
                                     </td>
-                                    <td>@(match.Player1?.Name ?? "—")</td>
-                                    <td>@(match.Player2Id is null ? "— (bye)" : (match.Player2?.Name ?? "—"))</td>
+                                    <td>@PlayerNameCell(match.Player1)</td>
+                                    <td>@if (match.Player2Id is null) {<span class="text-muted">— (bye)</span>} else {@PlayerNameCell(match.Player2)}</td>
                                     <td class="text-muted small fw-normal">
                                         @if (match.Player1WentFirst == true) { <span>@(match.Player1?.Name ?? "P1")</span> }
                                         else if (match.Player1WentFirst == false) { <span>@(match.Player2?.Name ?? "P2")</span> }
@@ -289,11 +295,22 @@ else
     @* ── Standings ─────────────────────────────────────────────────────────────── *@
     @if (_standings.Any())
     {
+        var orderedRounds = _allRounds.OrderBy(r => r.Round.RoundNumber).ToList();
         <h2 class="h5 mt-4">Standings</h2>
         <div class="table-responsive mb-4">
             <table class="table table-sm">
                 <thead>
-                    <tr><th>#</th><th>Player</th><th>Faction</th><th>W</th><th>Pts</th></tr>
+                    <tr>
+                        <th>#</th>
+                        <th>Player</th>
+                        <th>Faction</th>
+                        <th>W</th>
+                        <th>Pts</th>
+                        @foreach (var (r, _) in orderedRounds)
+                        {
+                            <th class="text-center small">R@r.RoundNumber</th>
+                        }
+                    </tr>
                 </thead>
                 <tbody>
                     @{var pos = 1;}
@@ -302,10 +319,24 @@ else
                         var player = _players.FirstOrDefault(p => p.Id == standing.PlayerId);
                         <tr>
                             <td>@pos</td>
-                            <td>@(player?.Name ?? "—")</td>
+                            <td>@PlayerNameCell(player)</td>
                             <td>@(player?.ArmyFaction ?? "—")</td>
                             <td>@standing.Wins</td>
                             <td>@standing.TotalPoints</td>
+                            @foreach (var (_, matches) in orderedRounds)
+                            {
+                                var m = matches.FirstOrDefault(x =>
+                                    x.Player1Id == standing.PlayerId || x.Player2Id == standing.PlayerId);
+                                @if (m is null || !m.IsScored)
+                                {
+                                    <td class="text-center text-muted small">—</td>
+                                }
+                                else
+                                {
+                                    var (ds, dc) = RoundScore(m, standing.PlayerId);
+                                    <td class="text-center small fw-semibold @dc">@ds</td>
+                                }
+                            }
                         </tr>
                         pos++;
                     }
@@ -331,7 +362,7 @@ else
                     @foreach (var player in _players.OrderBy(p => p.Name))
                     {
                         <tr>
-                            <td>@player.Name</td>
+                            <td>@PlayerNameCell(player)</td>
                             <td>@(player.ArmyFaction ?? "—")</td>
                             <td>@(player.IsDropped ? "Dropped" : "Active")</td>
                         </tr>
@@ -351,6 +382,7 @@ else
     private List<PlayerStanding> _standings = [];
     /// <summary>All rounds newest-first, each paired with its match list.</summary>
     private List<(Round Round, List<Match> Matches)> _allRounds = [];
+    private Dictionary<string, PlayerRating> _playerRatings = [];
     private bool _loading = true;
     private string? _sessionEmail;
     private Guid? _myPlayerId;
@@ -410,8 +442,48 @@ else
                     && !m.IsScored && m.Player2Id is not null);
             }
         }
+        var ratingList = await EloService.GetLeaderboardAsync();
+        _playerRatings = ratingList.ToDictionary(r => r.Email, StringComparer.OrdinalIgnoreCase);
+
         _loading = false;
     }
+
+    /// Returns (displayScore, cssClass) for a player's match in the standings grid.
+    private (int score, string css) RoundScore(Match m, Guid playerId)
+    {
+        var isP1 = m.Player1Id == playerId;
+        var raw  = isP1 ? (m.Player1Score ?? 0) : (m.Player2Score ?? 0);
+        var oRaw = isP1 ? (m.Player2Score ?? 0) : (m.Player1Score ?? 0);
+
+        if (_tournament?.ScoringSystem == ScoringSystem.Wtc)
+        {
+            var (g1, g2) = WtcScoring.ConvertToGamePoints(m.Player1Score ?? 0, m.Player2Score ?? 0);
+            var gp = isP1 ? g1 : g2;
+            var css = gp > 10 ? "text-success" : gp < 10 ? "text-danger" : "text-info";
+            return (gp, css);
+        }
+        else
+        {
+            var css = raw > oRaw ? "text-success" : raw < oRaw ? "text-danger" : "text-info";
+            return (raw, css);
+        }
+    }
+
+    private RenderFragment PlayerNameCell(Player? player) => __builder =>
+    {
+        if (player is null) { __builder.AddContent(0, "—"); return; }
+        if (player.Email is not null && _playerRatings.TryGetValue(player.Email, out var r))
+        {
+            __builder.OpenElement(0, "a");
+            __builder.AddAttribute(1, "href", $"/player/{r.Id}");
+            __builder.AddContent(2, player.Name);
+            __builder.CloseElement();
+        }
+        else
+        {
+            __builder.AddContent(0, player.Name);
+        }
+    };
 
     private async Task SubmitMatchResult()
     {

@@ -62,13 +62,17 @@ else
     </div>
 
     @* ── Army list ────────────────────────────────────────────────────────────── *@
-    @if (!string.IsNullOrWhiteSpace(_player.ArmyList))
-    {
-        <div class="mb-4">
-            <h2 class="h6">Army list</h2>
-            <pre class="border rounded p-3 bg-body-secondary small" style="white-space:pre-wrap;max-height:300px;overflow-y:auto">@_player.ArmyList</pre>
-        </div>
-    }
+    <div class="mb-4">
+        <h2 class="h6">Army list</h2>
+        @if (string.IsNullOrWhiteSpace(_player.ArmyList))
+        {
+            <p class="text-muted small">No army list submitted.</p>
+        }
+        else
+        {
+            <pre class="border rounded p-3 bg-body-secondary small" style="white-space:pre-wrap;max-height:400px;overflow-y:auto">@_player.ArmyList</pre>
+        }
+    </div>
 
     @* ── Round performance ────────────────────────────────────────────────────── *@
     <h2 class="h5">Round performance</h2>

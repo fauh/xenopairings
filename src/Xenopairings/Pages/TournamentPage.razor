@@ -123,24 +123,23 @@ else
         </div>
     }
 
-    @* ── Rounds (all, newest first) ────────────────────────────────────────────── *@
-    @foreach (var (round, matches) in _allRounds)
+    @* ── Current round ───────────────────────────────────────────────────────────── *@
+    @if (_currentRound is not null)
     {
-        var myMatch = _myPlayerId.HasValue
-            ? matches.FirstOrDefault(m => m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId)
-            : null;
-        var isCurrentRound = !round.IsComplete;
+        var matches = _currentMatches;
+        var myMatch = _myCurrentMatch;
 
         <div class="mt-4">
             <h2 class="h5 d-flex align-items-center gap-2">
-                <a href="/t/@_tournament!.Slug/round/@round.RoundNumber" class="text-decoration-none text-body">
-                    Round @round.RoundNumber
+                <a href="/t/@_tournament!.Slug/round/@_currentRound.RoundNumber"
+                   class="text-decoration-none text-body">
+                    Round @_currentRound.RoundNumber
                 </a>
-                @if (!string.IsNullOrWhiteSpace(round.MissionLayout))
+                @if (!string.IsNullOrWhiteSpace(_currentRound.MissionLayout))
                 {
-                    <small class="text-muted fw-normal">@round.MissionLayout</small>
+                    <small class="text-muted fw-normal">@_currentRound.MissionLayout</small>
                 }
-                @if (round.IsComplete)
+                @if (_currentRound.IsComplete)
                 {
                     <span class="badge text-bg-success">Complete</span>
                 }
@@ -148,12 +147,12 @@ else
                 {
                     <span class="badge text-bg-warning">In progress</span>
                 }
-                <a href="/t/@_tournament!.Slug/round/@round.RoundNumber"
+                <a href="/t/@_tournament!.Slug/round/@_currentRound.RoundNumber"
                    class="btn btn-outline-secondary btn-sm ms-auto">View →</a>
             </h2>
 
-            @* ── Submit form: only for logged-in player's unscored match in current round ── *@
-            @if (isCurrentRound && myMatch is not null && !myMatch.IsScored && myMatch.Player2Id is not null)
+            @* Submit form — unscored match in the current round *@
+            @if (!_currentRound.IsComplete && myMatch is not null && !myMatch.IsScored && myMatch.Player2Id is not null)
             {
                 var opponent = myMatch.Player1Id == _myPlayerId ? myMatch.Player2 : myMatch.Player1;
                 <div class="card mb-3 border-primary" style="max-width:480px">
@@ -173,39 +172,36 @@ else
                                        @bind="_submitOpponentScore" placeholder="0" />
                             </div>
                         </div>
-
                         <div class="mb-3">
                             <label class="form-label small">First turn</label>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="firstTurn-@myMatch.Id"
-                                       id="firstTurn-me-@round.Id" @onchange="() => _submitIWentFirst = true"
+                                <input class="form-check-input" type="radio" name="ft"
+                                       id="ft-me" @onchange="() => _submitIWentFirst = true"
                                        checked="@(_submitIWentFirst == true)" />
-                                <label class="form-check-label small" for="firstTurn-me-@round.Id">I went first</label>
+                                <label class="form-check-label small" for="ft-me">I went first</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="firstTurn-@myMatch.Id"
-                                       id="firstTurn-them-@round.Id" @onchange="() => _submitIWentFirst = false"
+                                <input class="form-check-input" type="radio" name="ft"
+                                       id="ft-them" @onchange="() => _submitIWentFirst = false"
                                        checked="@(_submitIWentFirst == false)" />
-                                <label class="form-check-label small" for="firstTurn-them-@round.Id">Opponent went first</label>
+                                <label class="form-check-label small" for="ft-them">Opponent went first</label>
                             </div>
                         </div>
-
                         <div class="mb-3">
                             <label class="form-label small">Role</label>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="role-@myMatch.Id"
-                                       id="role-attacker-@round.Id" @onchange="() => _submitIWasAttacker = true"
+                                <input class="form-check-input" type="radio" name="role"
+                                       id="role-atk" @onchange="() => _submitIWasAttacker = true"
                                        checked="@(_submitIWasAttacker == true)" />
-                                <label class="form-check-label small" for="role-attacker-@round.Id">I was attacker</label>
+                                <label class="form-check-label small" for="role-atk">Attacker</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="role-@myMatch.Id"
-                                       id="role-defender-@round.Id" @onchange="() => _submitIWasAttacker = false"
+                                <input class="form-check-input" type="radio" name="role"
+                                       id="role-def" @onchange="() => _submitIWasAttacker = false"
                                        checked="@(_submitIWasAttacker == false)" />
-                                <label class="form-check-label small" for="role-defender-@round.Id">I was defender</label>
+                                <label class="form-check-label small" for="role-def">Defender</label>
                             </div>
                         </div>
-
                         @if (!string.IsNullOrEmpty(_submitError))
                         {
                             <div class="alert alert-danger py-2 small">@_submitError</div>
@@ -214,9 +210,7 @@ else
                         {
                             <div class="alert alert-success py-2 small">Result submitted!</div>
                         }
-
-                        <button class="btn btn-primary btn-sm"
-                                @onclick="SubmitMatchResult"
+                        <button class="btn btn-primary btn-sm" @onclick="SubmitMatchResult"
                                 disabled="@(_submitMyScore is null || _submitOpponentScore is null
                                             || _submitIWentFirst is null || _submitIWasAttacker is null
                                             || _submitBusy)">
@@ -227,29 +221,29 @@ else
             }
             else if (myMatch is not null && myMatch.IsScored)
             {
-                var myScore = myMatch.Player1Id == _myPlayerId ? myMatch.Player1Score : myMatch.Player2Score;
+                var myScore  = myMatch.Player1Id == _myPlayerId ? myMatch.Player1Score : myMatch.Player2Score;
                 var oppScore = myMatch.Player1Id == _myPlayerId ? myMatch.Player2Score : myMatch.Player1Score;
                 <div class="alert alert-success mb-3 py-2 small">
                     <strong>Your result:</strong> @myScore — @oppScore
                 </div>
             }
 
-            @* ── Pairings table: logged-in player's match floated to top ─────── *@
+            @* Pairings — all tables, player's row first + highlighted *@
             @if (!matches.Any())
             {
                 <p class="text-muted small">No pairings yet.</p>
             }
             else
             {
-                    <div class="table-responsive mb-3">
+                <div class="table-responsive mb-3">
                     <table class="table table-sm">
                         <thead>
                             <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th>First</th><th>Attacker</th><th>Result</th></tr>
                         </thead>
                         <tbody>
                             @foreach (var match in (myMatch is not null
-                    ? matches.OrderBy(m => m.Id == myMatch.Id ? 0 : 1).ThenBy(m => m.TableNumber)
-                    : matches.OrderBy(m => m.TableNumber)))
+                                ? matches.OrderBy(m => m.Id == myMatch.Id ? 0 : 1).ThenBy(m => m.TableNumber)
+                                : matches.OrderBy(m => m.TableNumber)))
                             {
                                 var isMyRow = match.Id == myMatch?.Id;
                                 <tr class="@(isMyRow ? "table-primary fw-semibold" : "")">
@@ -280,7 +274,7 @@ else
                                         }
                                         else
                                         {
-                                            <span class="text-muted">pending</span>
+                                            <span class="text-muted small">pending</span>
                                         }
                                     </td>
                                 </tr>
@@ -308,7 +302,7 @@ else
                         <th>Pts</th>
                         @foreach (var (r, _) in orderedRounds)
                         {
-                            <th class="text-center small">R@r.RoundNumber</th>
+                            <th class="text-center small">R@(r.RoundNumber)</th>
                         }
                     </tr>
                 </thead>
@@ -381,7 +375,11 @@ else
     private List<Player> _players = [];
     private List<PlayerStanding> _standings = [];
     /// <summary>All rounds newest-first, each paired with its match list.</summary>
+    // _allRounds kept for the standings per-round grid; not rendered directly
     private List<(Round Round, List<Match> Matches)> _allRounds = [];
+    // Only one round shown on the page: the latest incomplete, or last complete if all done
+    private Round? _currentRound;
+    private List<Match> _currentMatches = [];
     private Dictionary<string, PlayerRating> _playerRatings = [];
     private bool _loading = true;
     private string? _sessionEmail;
@@ -426,18 +424,25 @@ else
             }
 
             var rounds = await RoundService.ListByTournamentAsync(_tournament.Id);
-            // Build all-rounds list newest first, with each round's matches
+            // Build all-rounds list (ascending order) for the standings grid
             _allRounds = [];
-            foreach (var r in rounds.OrderByDescending(r => r.RoundNumber))
+            foreach (var r in rounds.OrderBy(r => r.RoundNumber))
             {
                 var matches = new List<Match>(await RoundService.GetMatchesAsync(r.Id));
                 _allRounds.Add((r, matches));
             }
-            // Track the logged-in player's unscored match in the current (incomplete) round
-            if (_myPlayerId.HasValue)
+            // Current round = latest incomplete, or last complete if all done
+            var currentEntry = _allRounds.LastOrDefault(x => !x.Round.IsComplete);
+            if (currentEntry == default) currentEntry = _allRounds.LastOrDefault();
+            if (currentEntry != default)
             {
-                var activeRound = _allRounds.FirstOrDefault(x => !x.Round.IsComplete);
-                _myCurrentMatch = activeRound.Matches?.FirstOrDefault(m =>
+                _currentRound   = currentEntry.Round;
+                _currentMatches = currentEntry.Matches;
+            }
+            // Track the logged-in player's unscored match in the current round
+            if (_myPlayerId.HasValue && _currentMatches.Any())
+            {
+                _myCurrentMatch = _currentMatches.FirstOrDefault(m =>
                     (m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId)
                     && !m.IsScored && m.Player2Id is not null);
             }
@@ -449,6 +454,27 @@ else
     }
 
     /// Returns (displayScore, cssClass) for a player's match in the standings grid.
+    private async Task RefreshRoundsAsync()
+    {
+        if (_tournament is null) return;
+        var rounds = await RoundService.ListByTournamentAsync(_tournament.Id);
+        _allRounds = [];
+        foreach (var r in rounds.OrderBy(r => r.RoundNumber))
+            _allRounds.Add((r, new List<Match>(await RoundService.GetMatchesAsync(r.Id))));
+
+        var currentEntry = _allRounds.LastOrDefault(x => !x.Round.IsComplete);
+        if (currentEntry == default) currentEntry = _allRounds.LastOrDefault();
+        if (currentEntry != default)
+        {
+            _currentRound   = currentEntry.Round;
+            _currentMatches = currentEntry.Matches;
+        }
+        if (_myPlayerId.HasValue)
+            _myCurrentMatch = _currentMatches.FirstOrDefault(m =>
+                (m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId)
+                && !m.IsScored && m.Player2Id is not null);
+    }
+
     private (int score, string css) RoundScore(Match m, Guid playerId)
     {
         var isP1 = m.Player1Id == playerId;
@@ -504,16 +530,8 @@ else
                 _submitIWentFirst.Value,
                 _submitIWasAttacker.Value);
 
-            // Refresh all rounds and standings
-            var rounds = await RoundService.ListByTournamentAsync(_tournament!.Id);
-            _allRounds = [];
-            foreach (var r in rounds.OrderByDescending(r => r.RoundNumber))
-                _allRounds.Add((r, new List<Match>(await RoundService.GetMatchesAsync(r.Id))));
-            var activeRound = _allRounds.FirstOrDefault(x => !x.Round.IsComplete);
-            _myCurrentMatch = activeRound.Matches?.FirstOrDefault(m =>
-                (m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId)
-                && !m.IsScored && m.Player2Id is not null);
-            _standings = [.. await StandingsService.ComputeAsync(_tournament.Id, _tournament.ScoringSystem)];
+            await RefreshRoundsAsync();
+            _standings = [.. await StandingsService.ComputeAsync(_tournament!.Id, _tournament.ScoringSystem)];
             _submitSuccess = true;
         }
         catch (Exception ex)
@@ -542,11 +560,7 @@ else
             ));
             _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
             _standings = [.. await StandingsService.ComputeAsync(_tournament.Id, _tournament.ScoringSystem)];
-            // Refresh rounds so the newly registered player sees their pairing if a round already exists
-            var rounds = await RoundService.ListByTournamentAsync(_tournament.Id);
-            _allRounds = [];
-            foreach (var r in rounds.OrderByDescending(r => r.RoundNumber))
-                _allRounds.Add((r, new List<Match>(await RoundService.GetMatchesAsync(r.Id))));
+            await RefreshRoundsAsync();
             _registrationSuccess = true;
             _myRegistrationSuccess = true;
         }

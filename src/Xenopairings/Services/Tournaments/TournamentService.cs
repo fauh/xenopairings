@@ -127,6 +127,14 @@ public class TournamentService(
         await db.SaveChangesAsync();
     }
 
+    public async Task SetArmyListLockedAsync(Guid tournamentId, bool locked)
+    {
+        var t = await db.Tournaments.FindAsync(tournamentId);
+        if (t is null) return;
+        t.ArmyListLocked = locked;
+        await db.SaveChangesAsync();
+    }
+
     public async Task StartAsync(Guid tournamentId)
     {
         var t = await db.Tournaments.FindAsync(tournamentId)

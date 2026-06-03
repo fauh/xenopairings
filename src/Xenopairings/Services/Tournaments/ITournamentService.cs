@@ -9,6 +9,7 @@ public interface ITournamentService
     Task<Tournament?> GetBySlugAsync(string slug);
     Task<Tournament?> GetByManageTokenAsync(string token);
     Task SetRegistrationOpenAsync(Guid tournamentId, bool open);
+    Task SetArmyListLockedAsync(Guid tournamentId, bool locked);
     /// <summary>Transitions Upcoming → InProgress; auto-closes registration.</summary>
     Task StartAsync(Guid tournamentId);
     /// <summary>Transitions any non-Ended status → Ended; auto-closes registration.</summary>

@@ -56,6 +56,16 @@ else
                 </button>
             }
 
+            @* Army list lock — available when event is not Ended *@
+            @if (_tournament.Status != TournamentStatus.Ended)
+            {
+                <button class="btn btn-sm me-2 @(_tournament.ArmyListLocked ? "btn-warning" : "btn-outline-secondary")"
+                        @onclick="ToggleArmyListLock" disabled="@_saving"
+                        title="@(_tournament.ArmyListLocked ? "Players cannot edit their army list" : "Players can still edit their army list")">
+                    @(_tournament.ArmyListLocked ? "🔒 Army lists locked" : "🔓 Lock army lists")
+                </button>
+            }
+
             @* Start event — Upcoming only *@
             @if (_tournament.Status == TournamentStatus.Upcoming)
             {
@@ -551,6 +561,18 @@ else
         }
         catch (Exception ex) { _errorMessage = ex.Message; }
         finally { _saving = false; }
+    }
+
+    private async Task ToggleArmyListLock()
+    {
+        if (_tournament is null) return;
+        _saving = true;
+        _errorMessage = null;
+        var newValue = !_tournament.ArmyListLocked;
+        await TournamentService.SetArmyListLockedAsync(_tournament.Id, newValue);
+        _tournament.ArmyListLocked = newValue;
+        _statusMessage = newValue ? "Army lists are now locked." : "Army lists are now unlocked.";
+        _saving = false;
     }
 
     private async Task ToggleRegistration()

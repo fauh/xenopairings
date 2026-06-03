@@ -12,6 +12,8 @@ public class Tournament
     public int MaxPlayers { get; set; }
     public bool IsPrivate { get; set; }
     public TournamentStatus Status { get; set; } = TournamentStatus.Upcoming;
+    /// <summary>When true, players can no longer edit their army list or faction.</summary>
+    public bool ArmyListLocked { get; set; }
     public string OrganizerName { get; set; } = string.Empty;
     public string OrganizerEmail { get; set; } = string.Empty;
     public string ManageToken { get; set; } = string.Empty;

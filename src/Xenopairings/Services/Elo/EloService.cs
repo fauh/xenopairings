@@ -12,21 +12,41 @@ namespace Xenopairings.Services.Elo;
 /// All matches in the tournament are evaluated against the player's pre-tournament rating
 /// (the snapshot). Deltas from every match are summed and applied in one update.
 ///
-/// Formula: standard Elo with K = 32, starting rating 1000.
+/// Formula: standard Elo, starting rating 1000.
 ///   Expected:  Ea = 1 / (1 + 10^((Rb - Ra) / 400))
-///   Delta:     ΔRa = K × (Sa - Ea)
+///   Delta:     ΔRa = K(games) × (Sa - Ea)
 ///   Net:       Ra' = Ra_snapshot + Σ ΔRa (across all matches in the tournament)
 ///
-/// Outcome (Sa) per scoring system:
-///   GW:  win=1.0 · draw=0.5 · loss=0.0
-///   WTC: Sa = player_game_points / 20.0  (fractional; both players' Sa sum to 1)
+/// Variable K (calibration):
+///   K(n) = max(K_MIN, K_START / (1 + n / K_HALF_LIFE))
+///   where n = games played BEFORE this tournament.
+///   0 games → K=64, 20 games → K=32, ~64 games → K=16 (floor).
+///   New players calibrate quickly; established players are stable.
+///
+/// Outcome (Sa) — binary for both scoring systems:
+///   Win (score > opponent, or GP > 10 for WTC) → Sa = 1.0
+///   Draw (equal, or GP == 10 for WTC)          → Sa = 0.5
+///   Loss                                        → Sa = 0.0
+///   WTC game points determine the outcome category but are NOT used as
+///   a fractional score — a 16–4 and a 12–8 are both wins (Sa = 1.0).
 ///
 /// Byes and players without an email are skipped silently.
 /// </summary>
 public sealed class EloService(AppDbContext db) : IEloService
 {
-    private const double K = 32.0;
+    private const double K_START     = 64.0;   // K for a brand-new player
+    private const double K_MIN       = 16.0;   // K floor for experienced players
+    private const double K_HALF_LIFE = 20.0;   // games played at which K halves from start to midpoint
     private const double InitialRating = 1000.0;
+
+    /// <summary>
+    /// Variable K-factor. Decreases smoothly as games played increases.
+    ///   0 games  → K ≈ 64
+    ///   20 games → K ≈ 32
+    ///   64 games → K ≈ 16  (floor)
+    /// </summary>
+    private static double KFor(int gamesPlayed) =>
+        Math.Max(K_MIN, K_START / (1.0 + gamesPlayed / K_HALF_LIFE));
 
     public async Task ProcessTournamentAsync(Guid tournamentId)
     {
@@ -65,6 +85,8 @@ public sealed class EloService(AppDbContext db) : IEloService
         //           record their pre-tournament rating.
         var ratingByEmail = new Dictionary<string, PlayerRating>(StringComparer.OrdinalIgnoreCase);
         var snapshotByEmail = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        // Snapshot games_played BEFORE this tournament to determine K for each player
+        var snapshotGamesPlayed = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var email in emailSet)
         {
@@ -78,6 +100,7 @@ public sealed class EloService(AppDbContext db) : IEloService
             var rating = await GetOrCreateAsync(email, name);
             ratingByEmail[email] = rating;
             snapshotByEmail[email] = rating.Rating;
+            snapshotGamesPlayed[email] = rating.GamesPlayed;
         }
 
         // Calculate total ELO delta per player using the snapshot ratings
@@ -100,8 +123,9 @@ public sealed class EloService(AppDbContext db) : IEloService
             var expected1 = 1.0 / (1.0 + Math.Pow(10, (snap2 - snap1) / 400.0));
             var expected2 = 1.0 - expected1;
 
-            deltaByEmail[p1Email] += K * (actual1 - expected1);
-            deltaByEmail[p2Email] += K * (actual2 - expected2);
+            // K is based on each player's games played BEFORE this tournament
+            deltaByEmail[p1Email] += KFor(snapshotGamesPlayed[p1Email]) * (actual1 - expected1);
+            deltaByEmail[p2Email] += KFor(snapshotGamesPlayed[p2Email]) * (actual2 - expected2);
 
             // Record outcome for history
             outcomesByEmail[p1Email].Add((tournamentId, p2Email, match.Player2?.Name ?? "?", match.Player1Score ?? 0, match.Player2Score ?? 0, actual1));
@@ -192,10 +216,14 @@ public sealed class EloService(AppDbContext db) : IEloService
         var raw1 = match.Player1Score ?? 0;
         var raw2 = match.Player2Score ?? 0;
 
+        // WTC: convert to game points to determine the outcome category, then use binary
+        // (a 16–4 and a 12–8 are both wins — ELO cares about win/draw/loss, not margin)
         if (scoringSystem == ScoringSystem.Wtc)
         {
-            var (gp1, gp2) = WtcScoring.ConvertToGamePoints(raw1, raw2);
-            return (gp1 / 20.0, gp2 / 20.0);
+            var (gp1, _) = WtcScoring.ConvertToGamePoints(raw1, raw2);
+            if (gp1 > 10) return (1.0, 0.0);
+            if (gp1 < 10) return (0.0, 1.0);
+            return (0.5, 0.5);
         }
 
         if (raw1 > raw2) return (1.0, 0.0);

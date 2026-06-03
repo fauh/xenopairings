@@ -1,0 +1,280 @@
+@page "/account"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Xenopairings.Models
+@using Xenopairings.Services.Auth
+@using Xenopairings.Services.Elo
+@using Xenopairings.Services.Organizations
+@inject IAuthService AuthService
+@inject IEloService EloService
+@inject IOrganizationService OrgService
+@inject NavigationManager Nav
+
+<PageTitle>Account — Xenopairings</PageTitle>
+
+@if (_loading)
+{
+    <LoadingSpinner />
+}
+else if (_userId is null)
+{
+    <div class="alert alert-warning">
+        <a href="/login">Sign in</a> to manage your account.
+    </div>
+}
+else
+{
+    <h1>Account settings</h1>
+    <p class="text-muted mb-4">Signed in as <strong>@_email</strong></p>
+
+    <div class="row g-4" style="max-width:640px">
+
+        @* ── Display name ─────────────────────────────────────────────────────── *@
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h6 card-title">Display name</h2>
+                    <p class="text-muted small">Shown on the leaderboard and player profiles.</p>
+                    <div class="input-group">
+                        <input class="form-control" @bind="_displayName" maxlength="200"
+                               placeholder="Your display name" />
+                        <button class="btn btn-outline-primary"
+                                @onclick="SaveDisplayName" disabled="@_saving">
+                            Save
+                        </button>
+                    </div>
+                    @if (_displayNameMsg is not null)
+                    {
+                        <div class="small mt-1 @(_displayNameSuccess ? "text-success" : "text-danger")">
+                            @_displayNameMsg
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* ── Change email ─────────────────────────────────────────────────────── *@
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h6 card-title">Change email</h2>
+                    <div class="mb-2">
+                        <label class="form-label small">New email address</label>
+                        <input class="form-control" type="email" @bind="_newEmail" maxlength="200" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Current password (to confirm)</label>
+                        <input class="form-control" type="password" @bind="_emailPassword" />
+                    </div>
+                    <button class="btn btn-outline-primary btn-sm"
+                            @onclick="SaveEmail" disabled="@_saving">
+                        Update email
+                    </button>
+                    @if (_emailMsg is not null)
+                    {
+                        <div class="small mt-1 @(_emailSuccess ? "text-success" : "text-danger")">
+                            @_emailMsg
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* ── Change password ──────────────────────────────────────────────────── *@
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h6 card-title">Change password</h2>
+                    <div class="mb-2">
+                        <label class="form-label small">Current password</label>
+                        <input class="form-control" type="password" @bind="_currentPassword" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">New password</label>
+                        <input class="form-control" type="password" @bind="_newPassword" minlength="8" />
+                        <div class="form-text">Minimum 8 characters.</div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Confirm new password</label>
+                        <input class="form-control" type="password" @bind="_confirmPassword" />
+                    </div>
+                    <button class="btn btn-outline-primary btn-sm"
+                            @onclick="SavePassword" disabled="@_saving">
+                        Change password
+                    </button>
+                    @if (_passwordMsg is not null)
+                    {
+                        <div class="small mt-1 @(_passwordSuccess ? "text-success" : "text-danger")">
+                            @_passwordMsg
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* ── Organizations ─────────────────────────────────────────────────────── *@
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h6 card-title">Organizations</h2>
+                    @if (!_orgs.Any())
+                    {
+                        <p class="text-muted small">You are not a member of any organizations.
+                            <a href="/organizations">Join or create one →</a>
+                        </p>
+                    }
+                    else
+                    {
+                        <ul class="list-group list-group-flush">
+                            @foreach (var org in _orgs)
+                            {
+                                <li class="list-group-item d-flex align-items-center justify-content-between px-0">
+                                    <span>
+                                        <a href="/organizations/@org.Id">@org.Name</a>
+                                        <span class="text-muted small ms-2">@org.Members.Count member@(org.Members.Count == 1 ? "" : "s")</span>
+                                    </span>
+                                    @if (!_confirmLeave.Contains(org.Id))
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                @onclick="() => _confirmLeave.Add(org.Id)">Leave</button>
+                                    }
+                                    else
+                                    {
+                                        <span>
+                                            <span class="text-danger small me-2">Leave "@org.Name"?</span>
+                                            <button class="btn btn-sm btn-danger me-1"
+                                                    @onclick="() => LeaveOrg(org.Id)"
+                                                    disabled="@_saving">Yes</button>
+                                            <button class="btn btn-sm btn-outline-secondary"
+                                                    @onclick="() => _confirmLeave.Remove(org.Id)">No</button>
+                                        </span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private Guid? _userId;
+    private string? _email;
+    private bool _loading = true;
+    private bool _saving;
+
+    // Display name
+    private string _displayName = string.Empty;
+    private string? _displayNameMsg;
+    private bool _displayNameSuccess;
+
+    // Email change
+    private string _newEmail = string.Empty;
+    private string _emailPassword = string.Empty;
+    private string? _emailMsg;
+    private bool _emailSuccess;
+
+    // Password change
+    private string _currentPassword = string.Empty;
+    private string _newPassword = string.Empty;
+    private string _confirmPassword = string.Empty;
+    private string? _passwordMsg;
+    private bool _passwordSuccess;
+
+    // Organizations
+    private List<Organization> _orgs = [];
+    private HashSet<Guid> _confirmLeave = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateTask;
+        var user = authState.User;
+        if (!user.Identity?.IsAuthenticated ?? true) { _loading = false; return; }
+
+        _email = user.FindFirst(ClaimTypes.Email)?.Value;
+        var uidStr = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (Guid.TryParse(uidStr, out var uid)) _userId = uid;
+
+        if (_userId.HasValue)
+        {
+            // Pre-fill display name from PlayerRating
+            if (_email is not null)
+            {
+                var rating = await EloService.GetByEmailAsync(_email);
+                _displayName = rating?.DisplayName ?? string.Empty;
+            }
+            _orgs = [.. await OrgService.ListByUserAsync(_userId.Value)];
+        }
+
+        _loading = false;
+    }
+
+    private async Task SaveDisplayName()
+    {
+        if (_userId is null || string.IsNullOrWhiteSpace(_displayName)) return;
+        _saving = true;
+        _displayNameMsg = null;
+        await AuthService.UpdateDisplayNameAsync(_userId.Value, _displayName);
+        _displayNameMsg = "Display name updated.";
+        _displayNameSuccess = true;
+        _saving = false;
+    }
+
+    private async Task SaveEmail()
+    {
+        if (_userId is null) return;
+        _saving = true;
+        _emailMsg = null;
+        var (ok, err) = await AuthService.ChangeEmailAsync(
+            _userId.Value, _emailPassword, _newEmail, Nav.BaseUri.TrimEnd('/'));
+        _emailSuccess = ok;
+        _emailMsg = ok
+            ? "Email updated. Check your new inbox to verify it."
+            : (err ?? "Failed to update email.");
+        _emailPassword = string.Empty;
+        _saving = false;
+    }
+
+    private async Task SavePassword()
+    {
+        if (_userId is null) return;
+        _saving = true;
+        _passwordMsg = null;
+
+        if (_newPassword.Length < 8)
+        {
+            _passwordMsg = "New password must be at least 8 characters.";
+            _passwordSuccess = false;
+            _saving = false;
+            return;
+        }
+        if (_newPassword != _confirmPassword)
+        {
+            _passwordMsg = "Passwords do not match.";
+            _passwordSuccess = false;
+            _saving = false;
+            return;
+        }
+
+        var ok = await AuthService.ChangePasswordAsync(_userId.Value, _currentPassword, _newPassword);
+        _passwordSuccess = ok;
+        _passwordMsg = ok ? "Password changed." : "Incorrect current password.";
+        if (ok) { _currentPassword = _newPassword = _confirmPassword = string.Empty; }
+        _saving = false;
+    }
+
+    private async Task LeaveOrg(Guid orgId)
+    {
+        if (_userId is null) return;
+        _saving = true;
+        _confirmLeave.Remove(orgId);
+        await OrgService.LeaveAsync(orgId, _userId.Value);
+        _orgs = [.. await OrgService.ListByUserAsync(_userId.Value)];
+        _saving = false;
+    }
+}

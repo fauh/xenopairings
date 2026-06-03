@@ -3,7 +3,11 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Xenopairings.Models
 @using Xenopairings.Services.Elo
+@using Xenopairings.Services.Auth
+@using Xenopairings.Services.Organizations
 @inject IEloService EloService
+@inject IAuthService AuthService
+@inject IOrganizationService OrgService
 @inject NavigationManager Nav
 
 <PageTitle>@(_rating?.DisplayName ?? "Player") — Xenopairings</PageTitle>
@@ -57,6 +61,20 @@ else
                     <div class="small text-success mt-1">@_visibilityMessage</div>
                 }
             </div>
+        </div>
+    }
+
+    @* ── Organizations ───────────────────────────────────────────────────────── *@
+    @if (_orgs.Any())
+    {
+        <div class="mb-4">
+            @foreach (var org in _orgs)
+            {
+                <a href="/organizations/@org.Id"
+                   class="badge text-bg-secondary text-decoration-none me-1">
+                    🏰 @org.Name
+                </a>
+            }
         </div>
     }
 
@@ -183,6 +201,7 @@ else
     private PlayerRating? _rating;
     private IReadOnlyList<PlayerRatingHistory> _history = [];
     private Dictionary<string, PlayerRating> _opponentProfiles = [];
+    private List<Organization> _orgs = [];
     private bool _loading = true;
     private bool _isOwnProfile;
     private string? _visibilityMessage;
@@ -199,6 +218,11 @@ else
             _history = result.Value.History;
             _isOwnProfile = myEmail is not null &&
                 string.Equals(myEmail, _rating.Email, StringComparison.OrdinalIgnoreCase);
+
+            // Load organizations this player belongs to (via email → User)
+            var profileUser = await AuthService.GetByEmailAsync(_rating.Email);
+            if (profileUser is not null)
+                _orgs = [.. await OrgService.ListByUserAsync(profileUser.Id)];
 
             // Load opponent ratings so we can link to their profiles
             var opponentEmails = _history

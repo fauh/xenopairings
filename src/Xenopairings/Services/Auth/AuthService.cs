@@ -53,6 +53,61 @@ public sealed class AuthService(
         return db.Users.FirstOrDefaultAsync(u => u.Email == normalised);
     }
 
+    // ── Profile editing ──────────────────────────────────────────────────────
+
+    public async Task UpdateDisplayNameAsync(Guid userId, string displayName)
+    {
+        var user = await db.Users.FindAsync(userId);
+        if (user is null) return;
+
+        // Sync to PlayerRating if one exists
+        var rating = await db.PlayerRatings.FirstOrDefaultAsync(r => r.Email == user.Email);
+        if (rating is not null)
+        {
+            rating.DisplayName = displayName.Trim();
+            await db.SaveChangesAsync();
+        }
+    }
+
+    public async Task<bool> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword)
+    {
+        var user = await db.Users.FindAsync(userId);
+        if (user is null) return false;
+
+        var result = passwordHasher.VerifyHashedPassword(user, user.PasswordHash, currentPassword);
+        if (result == PasswordVerificationResult.Failed) return false;
+
+        user.PasswordHash = passwordHasher.HashPassword(user, newPassword);
+        await db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<(bool success, string? error)> ChangeEmailAsync(
+        Guid userId, string currentPassword, string newEmail, string baseUrl)
+    {
+        var user = await db.Users.FindAsync(userId);
+        if (user is null) return (false, "User not found.");
+
+        var result = passwordHasher.VerifyHashedPassword(user, user.PasswordHash, currentPassword);
+        if (result == PasswordVerificationResult.Failed) return (false, "Incorrect current password.");
+
+        var normalised = newEmail.Trim().ToLowerInvariant();
+        var duplicate = await db.Users.AnyAsync(u => u.Email == normalised && u.Id != userId);
+        if (duplicate) return (false, "That email address is already in use.");
+
+        // Update PlayerRating email if one exists
+        var rating = await db.PlayerRatings.FirstOrDefaultAsync(r => r.Email == user.Email);
+        if (rating is not null) rating.Email = normalised;
+
+        user.Email = normalised;
+        user.EmailVerified = false;
+        user.EmailVerificationToken = GenerateToken();
+        await db.SaveChangesAsync();
+
+        await SendVerificationEmailAsync(userId, baseUrl);
+        return (true, null);
+    }
+
     // ── Email verification ────────────────────────────────────────────────────
 
     public async Task SendVerificationEmailAsync(Guid userId, string baseUrl)

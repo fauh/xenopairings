@@ -19,6 +19,14 @@ public interface IAuthService
     Task<IReadOnlyList<User>> ListAllAsync();
     Task SetVipAsync(Guid userId, bool isVip);
 
+    // ── Profile editing ──────────────────────────────────────────────────────
+    /// <summary>Updates the user's leaderboard display name (also syncs PlayerRating).</summary>
+    Task UpdateDisplayNameAsync(Guid userId, string displayName);
+    /// <summary>Changes password after verifying the current one. Returns false if current password is wrong.</summary>
+    Task<bool> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword);
+    /// <summary>Changes email after verifying current password. Sends verification to the new address. Returns false on wrong password or duplicate email.</summary>
+    Task<(bool success, string? error)> ChangeEmailAsync(Guid userId, string currentPassword, string newEmail, string baseUrl);
+
     // ── Email verification ────────────────────────────────────────────────────
     /// <summary>Generates a verification token and sends the confirmation email.</summary>
     Task SendVerificationEmailAsync(Guid userId, string baseUrl);

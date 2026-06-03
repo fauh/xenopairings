@@ -13,7 +13,7 @@
 {
     <LoadingSpinner />
 }
-else if (!_active.Any() && !_ended.Any())
+else if (!_ongoing.Any() && !_upcoming.Any() && !_past.Any())
 {
     <div class="empty-state">
         <div class="empty-state-icon" aria-hidden="true">🎲</div>
@@ -24,57 +24,84 @@ else if (!_active.Any() && !_ended.Any())
 }
 else
 {
-    @if (_active.Any())
+    @* ── Ongoing ─────────────────────────────────────────────────────────────── *@
+    @if (_ongoing.Any())
     {
+        <h2 class="h5 mt-3">Active / Ongoing</h2>
         <div class="table-responsive mb-4">
             <table class="table table-sm">
                 <thead>
-                    <tr>
-                        <th>Tournament</th>
-                        <th>Date</th>
-                        <th>Rounds</th>
-                        <th>Players</th>
-                        <th>Status</th>
-                    </tr>
+                    <tr><th>Tournament</th><th>Date</th><th>Rounds</th><th>Players</th><th>Status</th></tr>
                 </thead>
                 <tbody>
-                    @foreach (var row in _active)
+                    @foreach (var row in _ongoing)
                     {
                         <tr>
                             <td><a href="/t/@row.Tournament.Slug">@row.Tournament.Title</a></td>
                             <td class="text-nowrap">@row.Tournament.StartsAt.ToLocalTime().ToString("d MMM yyyy")</td>
                             <td>@row.Tournament.NumberOfRounds</td>
                             <td>@row.PlayerCount / @row.Tournament.MaxPlayers</td>
-                            <td>@StatusBadge(row.Tournament)</td>
+                            <td><span class="badge text-bg-primary">In Progress</span></td>
                         </tr>
                     }
                 </tbody>
             </table>
         </div>
     }
-    else
+
+    @* ── Upcoming ─────────────────────────────────────────────────────────────── *@
+    @if (_upcoming.Any())
     {
-        <p class="text-muted mb-4">No active tournaments right now.</p>
+        <h2 class="h5 @(_ongoing.Any() ? "" : "mt-3")">Upcoming</h2>
+        <div class="table-responsive mb-4">
+            <table class="table table-sm">
+                <thead>
+                    <tr><th>Tournament</th><th>Date</th><th>Rounds</th><th>Players</th><th>Registration</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _upcoming)
+                    {
+                        <tr>
+                            <td><a href="/t/@row.Tournament.Slug">@row.Tournament.Title</a></td>
+                            <td class="text-nowrap">@row.Tournament.StartsAt.ToLocalTime().ToString("d MMM yyyy")</td>
+                            <td>@row.Tournament.NumberOfRounds</td>
+                            <td>@row.PlayerCount / @row.Tournament.MaxPlayers</td>
+                            <td>
+                                @if (row.Tournament.RegistrationOpen)
+                                {
+                                    <span class="badge text-bg-success">Open</span>
+                                }
+                                else
+                                {
+                                    <span class="badge text-bg-warning">Closed</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
     }
 
-    @if (_ended.Any())
+    @if (!_ongoing.Any() && !_upcoming.Any())
+    {
+        <p class="text-muted mt-3">No active or upcoming tournaments right now.</p>
+    }
+
+    @* ── Past ─────────────────────────────────────────────────────────────────── *@
+    @if (_past.Any())
     {
         <details>
             <summary class="text-muted mb-2" style="cursor:pointer">
-                Past tournaments (@_ended.Count)
+                Past tournaments (@_past.Count)
             </summary>
             <div class="table-responsive mt-2">
                 <table class="table table-sm">
                     <thead>
-                        <tr>
-                            <th>Tournament</th>
-                            <th>Date</th>
-                            <th>Rounds</th>
-                            <th>Players</th>
-                        </tr>
+                        <tr><th>Tournament</th><th>Date</th><th>Rounds</th><th>Players</th></tr>
                     </thead>
                     <tbody>
-                        @foreach (var row in _ended)
+                        @foreach (var row in _past)
                         {
                             <tr>
                                 <td><a href="/t/@row.Tournament.Slug">@row.Tournament.Title</a></td>
@@ -95,8 +122,9 @@ else
 @code {
     private record TournamentRow(Tournament Tournament, int PlayerCount);
 
-    private List<TournamentRow> _active = [];
-    private List<TournamentRow> _ended  = [];
+    private List<TournamentRow> _ongoing  = [];
+    private List<TournamentRow> _upcoming = [];
+    private List<TournamentRow> _past     = [];
     private bool _loading = true;
 
     protected override async Task OnInitializedAsync()
@@ -110,29 +138,13 @@ else
             rows.Add(new TournamentRow(t, players.Count(p => !p.IsDropped)));
         }
 
-        // Split by Status: Ended → past; everything else → active
-        _active = [.. rows
-            .Where(r => r.Tournament.Status != TournamentStatus.Ended)
-            .OrderBy(r => r.Tournament.StartsAt)];
-        _ended  = [.. rows
-            .Where(r => r.Tournament.Status == TournamentStatus.Ended)
-            .OrderByDescending(r => r.Tournament.StartsAt)];
+        _ongoing  = [.. rows.Where(r => r.Tournament.Status == TournamentStatus.InProgress)
+                             .OrderBy(r => r.Tournament.StartsAt)];
+        _upcoming = [.. rows.Where(r => r.Tournament.Status == TournamentStatus.Upcoming)
+                             .OrderBy(r => r.Tournament.StartsAt)];
+        _past     = [.. rows.Where(r => r.Tournament.Status == TournamentStatus.Ended)
+                             .OrderByDescending(r => r.Tournament.StartsAt)];
 
         _loading = false;
     }
-
-    private static RenderFragment StatusBadge(Tournament t) => __builder =>
-    {
-        var (label, css) = t.Status switch
-        {
-            TournamentStatus.InProgress => ("In Progress", "text-bg-primary"),
-            TournamentStatus.Ended      => ("Ended",       "text-bg-secondary"),
-            _ when t.RegistrationOpen   => ("Reg. Open",   "text-bg-success"),
-            _                           => ("Reg. Closed", "text-bg-warning"),
-        };
-        __builder.OpenElement(0, "span");
-        __builder.AddAttribute(1, "class", $"badge {css}");
-        __builder.AddContent(2, label);
-        __builder.CloseElement();
-    };
 }

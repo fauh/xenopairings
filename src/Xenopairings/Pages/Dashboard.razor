@@ -21,87 +21,135 @@ else
 
     @* ── Organizing ──────────────────────────────────────────────────────────── *@
     <h2 class="h5">Organizing</h2>
-    @if (!_organizing.Any())
+    @if (!_organizingActive.Any() && !_organizingPast.Any())
     {
-        <p class="text-muted mb-4">You haven't created any tournaments yet.
-            <a href="/new">Create one →</a>
-        </p>
+        <p class="text-muted mb-4">You haven't created any tournaments yet. <a href="/new">Create one →</a></p>
     }
     else
     {
-        <div class="table-responsive mb-4">
-            <table class="table table-sm">
-                <thead>
-                    <tr><th>Tournament</th><th>Date</th><th>Players</th><th>Registration</th><th></th></tr>
-                </thead>
-                <tbody>
-                    @foreach (var t in _organizing)
-                    {
-                        <tr>
-                            <td><a href="/t/@t.Slug">@t.Title</a></td>
-                            <td class="text-nowrap">@t.StartsAt.ToLocalTime().ToString("d MMM yyyy")</td>
-                            <td>@t.NumberOfRounds rounds</td>
-                            <td>
-                                @switch (t.Status)
-                                {
-                                    case TournamentStatus.Ended:
-                                        <span class="badge text-bg-secondary">Ended</span>
-                                        break;
-                                    case TournamentStatus.InProgress:
-                                        <span class="badge text-bg-primary">In Progress</span>
-                                        break;
-                                    default:
-                                        @if (t.RegistrationOpen)
-                                        {
-                                            <span class="badge text-bg-success">Reg. Open</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge text-bg-warning">Reg. Closed</span>
-                                        }
-                                        break;
-                                }
-                            </td>
-                            <td>
-                                <a href="/t/@t.Slug/manage" class="btn btn-sm btn-outline-primary">Manage</a>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+        @if (_organizingActive.Any())
+        {
+            <div class="table-responsive mb-2">
+                <table class="table table-sm">
+                    <thead>
+                        <tr><th>Tournament</th><th>Date</th><th>Rounds</th><th>Status</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in _organizingActive)
+                        {
+                            <tr>
+                                <td><a href="/t/@t.Slug">@t.Title</a></td>
+                                <td class="text-nowrap">@t.StartsAt.ToLocalTime().ToString("d MMM yyyy")</td>
+                                <td>@t.NumberOfRounds rounds</td>
+                                <td>@StatusBadge(t)</td>
+                                <td><a href="/t/@t.Slug/manage" class="btn btn-sm btn-outline-primary">Manage</a></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <p class="text-muted small">No active tournaments.</p>
+        }
+
+        @if (_organizingPast.Any())
+        {
+            <details class="mb-4">
+                <summary class="text-muted small" style="cursor:pointer">
+                    Past (@_organizingPast.Count)
+                </summary>
+                <div class="table-responsive mt-2">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr><th>Tournament</th><th>Date</th><th>Rounds</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var t in _organizingPast)
+                            {
+                                <tr>
+                                    <td><a href="/t/@t.Slug">@t.Title</a></td>
+                                    <td class="text-nowrap">@t.StartsAt.ToLocalTime().ToString("d MMM yyyy")</td>
+                                    <td>@t.NumberOfRounds rounds</td>
+                                    <td><a href="/t/@t.Slug/manage" class="btn btn-sm btn-outline-secondary">View</a></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        }
+        else
+        {
+            <div class="mb-4"></div>
+        }
     }
 
     @* ── Playing in ───────────────────────────────────────────────────────────── *@
     <h2 class="h5">Playing in</h2>
-    @if (!_playing.Any())
+    @if (!_playingActive.Any() && !_playingPast.Any())
     {
-        <p class="text-muted mb-4">You haven't registered for any tournaments yet.
-            <a href="/tournaments">Browse tournaments →</a>
-        </p>
+        <p class="text-muted mb-4">You haven't registered for any tournaments yet. <a href="/tournaments">Browse →</a></p>
     }
     else
     {
-        <div class="table-responsive mb-4">
-            <table class="table table-sm">
-                <thead>
-                    <tr><th>Tournament</th><th>Date</th><th>Faction</th><th></th></tr>
-                </thead>
-                <tbody>
-                    @foreach (var p in _playing)
-                    {
-                        <tr>
-                            <td><a href="/t/@p.Tournament.Slug">@p.Tournament.Title</a></td>
-                            <td class="text-nowrap">@p.Tournament.StartsAt.ToLocalTime().ToString("d MMM yyyy")</td>
-                            <td>@(p.ArmyFaction ?? "—")</td>
-                            <td>
-                                <a href="/t/@p.Tournament.Slug/edit-registration" class="btn btn-sm btn-outline-secondary">Edit</a>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+        @if (_playingActive.Any())
+        {
+            <div class="table-responsive mb-2">
+                <table class="table table-sm">
+                    <thead>
+                        <tr><th>Tournament</th><th>Date</th><th>Faction</th><th>Status</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in _playingActive)
+                        {
+                            <tr>
+                                <td><a href="/t/@p.Tournament.Slug">@p.Tournament.Title</a></td>
+                                <td class="text-nowrap">@p.Tournament.StartsAt.ToLocalTime().ToString("d MMM yyyy")</td>
+                                <td>@(p.ArmyFaction ?? "—")</td>
+                                <td>@StatusBadge(p.Tournament)</td>
+                                <td><a href="/t/@p.Tournament.Slug/edit-registration" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <p class="text-muted small">No active registrations.</p>
+        }
+
+        @if (_playingPast.Any())
+        {
+            <details class="mb-4">
+                <summary class="text-muted small" style="cursor:pointer">
+                    Past (@_playingPast.Count)
+                </summary>
+                <div class="table-responsive mt-2">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr><th>Tournament</th><th>Date</th><th>Faction</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var p in _playingPast)
+                            {
+                                <tr>
+                                    <td><a href="/t/@p.Tournament.Slug">@p.Tournament.Title</a></td>
+                                    <td class="text-nowrap">@p.Tournament.StartsAt.ToLocalTime().ToString("d MMM yyyy")</td>
+                                    <td>@(p.ArmyFaction ?? "—")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        }
+        else
+        {
+            <div class="mb-4"></div>
+        }
     }
 
     <div class="mt-2">
@@ -114,8 +162,10 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private string? _email;
-    private List<Tournament> _organizing = [];
-    private List<Player> _playing = [];
+    private List<Tournament> _organizingActive = [];
+    private List<Tournament> _organizingPast   = [];
+    private List<Player> _playingActive = [];
+    private List<Player> _playingPast   = [];
     private bool _loading = true;
 
     protected override async Task OnInitializedAsync()
@@ -129,8 +179,29 @@ else
             return;
         }
 
-        _organizing = [.. await TournamentService.ListByOrganizerEmailAsync(_email)];
-        _playing    = [.. await PlayerService.ListWithTournamentByEmailAsync(_email)];
+        var organizing = await TournamentService.ListByOrganizerEmailAsync(_email);
+        _organizingActive = [.. organizing.Where(t => t.Status != TournamentStatus.Ended)];
+        _organizingPast   = [.. organizing.Where(t => t.Status == TournamentStatus.Ended)];
+
+        var playing = await PlayerService.ListWithTournamentByEmailAsync(_email);
+        _playingActive = [.. playing.Where(p => p.Tournament.Status != TournamentStatus.Ended)];
+        _playingPast   = [.. playing.Where(p => p.Tournament.Status == TournamentStatus.Ended)];
+
         _loading = false;
     }
+
+    private static RenderFragment StatusBadge(Tournament t) => __builder =>
+    {
+        var (label, css) = t.Status switch
+        {
+            TournamentStatus.InProgress => ("In Progress", "text-bg-primary"),
+            TournamentStatus.Ended      => ("Ended",       "text-bg-secondary"),
+            _ when t.RegistrationOpen   => ("Reg. Open",   "text-bg-success"),
+            _                           => ("Reg. Closed", "text-bg-warning"),
+        };
+        __builder.OpenElement(0, "span");
+        __builder.AddAttribute(1, "class", $"badge {css}");
+        __builder.AddContent(2, label);
+        __builder.CloseElement();
+    };
 }

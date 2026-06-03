@@ -19,6 +19,18 @@ public interface IRoundService
     Task<IReadOnlyList<Match>> GetMatchesAsync(Guid roundId);
 
     /// <summary>
+    /// Overwrites the scores (and optional metadata) on any scored match, including those in
+    /// completed rounds. Updates PlayerRatingHistory raw scores but does NOT recalculate ELO
+    /// (the original ELO delta is kept as-is).
+    /// </summary>
+    Task UpdateScoreAsync(
+        Guid matchId,
+        int player1Score,
+        int player2Score,
+        bool? player1IsAttacker = null,
+        bool? player1WentFirst = null);
+
+    /// <summary>
     /// Enters both scores (and optional role metadata) for a match, marks it IsScored = true.
     /// Scores must be non-negative integers.
     /// </summary>

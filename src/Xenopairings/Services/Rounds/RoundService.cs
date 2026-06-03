@@ -525,6 +525,77 @@ public sealed class RoundService(
 
     // ── Score entry ───────────────────────────────────────────────────────────
 
+    public async Task UpdateScoreAsync(
+        Guid matchId,
+        int player1Score,
+        int player2Score,
+        bool? player1IsAttacker = null,
+        bool? player1WentFirst = null)
+    {
+        if (player1Score < 0 || player2Score < 0)
+            throw new ArgumentException("Scores must be non-negative.");
+
+        var match = await db.Matches.FindAsync(matchId)
+            ?? throw new InvalidOperationException($"Match {matchId} not found.");
+
+        if (match.Player2Id is null)
+            throw new InvalidOperationException("Cannot edit scores for a bye match.");
+
+        match.Player1Score = player1Score;
+        match.Player2Score = player2Score;
+        if (player1IsAttacker.HasValue) match.Player1IsAttacker = player1IsAttacker;
+        if (player1WentFirst.HasValue)  match.Player1WentFirst  = player1WentFirst;
+        // Keep IsScored = true (was already scored)
+        match.IsScored = true;
+
+        // Update raw scores in PlayerRatingHistory so history reflects the correction.
+        // ELO deltas (RatingBefore/RatingAfter) are NOT recalculated — the original
+        // ELO change was already applied and retroactive rebalancing is out of scope.
+        var histories = await db.PlayerRatingHistories
+            .Where(h => h.TournamentId == match.Round.TournamentId)
+            .ToListAsync();
+
+        // We can't query by matchId directly since history doesn't store it.
+        // Instead reload match with player navigation to match up by player+opponent emails.
+        var matchWithPlayers = await db.Matches
+            .Include(m => m.Player1)
+            .Include(m => m.Player2)
+            .Include(m => m.Round)
+            .FirstOrDefaultAsync(m => m.Id == matchId);
+
+        if (matchWithPlayers?.Player1?.Email is not null && matchWithPlayers.Player2?.Email is not null)
+        {
+            // Find the two history rows for this match (identified by both player emails and tournament)
+            var p1Email = matchWithPlayers.Player1.Email.ToLowerInvariant();
+            var p2Email = matchWithPlayers.Player2.Email.ToLowerInvariant();
+            var tournamentId = matchWithPlayers.Round.TournamentId;
+
+            var p1History = await db.PlayerRatingHistories
+                .Where(h => h.TournamentId == tournamentId
+                         && h.PlayerRating!.Email == p1Email
+                         && h.OpponentEmail == p2Email)
+                .FirstOrDefaultAsync();
+            if (p1History is not null)
+            {
+                p1History.MyRawScore = player1Score;
+                p1History.OpponentRawScore = player2Score;
+            }
+
+            var p2History = await db.PlayerRatingHistories
+                .Where(h => h.TournamentId == tournamentId
+                         && h.PlayerRating!.Email == p2Email
+                         && h.OpponentEmail == p1Email)
+                .FirstOrDefaultAsync();
+            if (p2History is not null)
+            {
+                p2History.MyRawScore = player2Score;
+                p2History.OpponentRawScore = player1Score;
+            }
+        }
+
+        await db.SaveChangesAsync();
+    }
+
     public async Task EnterScoresAsync(
         Guid matchId,
         int player1Score,

@@ -215,11 +215,11 @@ else
                                         {
                                             <span class="text-muted small">auto</span>
                                         }
-                                        else if (match.IsScored)
+                                        else if (match.IsScored && !_editingScores.Contains(match.Id))
                                         {
                                             <span>@match.Player1Score — @match.Player2Score</span>
                                         }
-                                        else
+                                        else if (!isBye)
                                         {
                                             var inputs = GetScoreInputs(match.Id);
                                             <div class="d-flex gap-1 align-items-center">
@@ -244,6 +244,29 @@ else
                                                     disabled="@(!canSave || _saving)"
                                                     @onclick="() => SaveScore(match.Id)">
                                                 Save
+                                            </button>
+                                        }
+                                        else if (match.IsScored && !isBye && _editingScores.Contains(match.Id))
+                                        {
+                                            var inputs = GetScoreInputs(match.Id);
+                                            var canSave = inputs.p1 is not null && inputs.p2 is not null;
+                                            <button class="btn btn-sm btn-primary me-1"
+                                                    disabled="@(!canSave || _saving)"
+                                                    @onclick="() => SaveEditedScore(match.Id)">
+                                                Update
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-secondary"
+                                                    @onclick="() => CancelEditScore(match.Id)">
+                                                Cancel
+                                            </button>
+                                        }
+                                        else if (match.IsScored && !isBye)
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary"
+                                                    @onclick="() => StartEditScore(match.Id, match.Player1Score, match.Player2Score)"
+                                                    disabled="@_saving"
+                                                    title="Edit score">
+                                                ✏
                                             </button>
                                         }
                                     </td>
@@ -417,6 +440,8 @@ else
     // First-turn and attacker pending selections before the score is saved
     private Dictionary<Guid, bool?> _firstTurnInputs = [];
     private Dictionary<Guid, bool?> _attackerInputs = [];
+    // Matches whose scores are currently being edited (in completed rounds)
+    private HashSet<Guid> _editingScores = [];
     private bool _loading = true;
     private bool _saving;
     private bool _confirmEnd;
@@ -631,6 +656,49 @@ else
         _scoreInputs.TryGetValue(matchId, out var current);
         var parsed = int.TryParse(raw, out var n) ? (int?)n : null;
         _scoreInputs[matchId] = isP1 ? (parsed, current.p2) : (current.p1, parsed);
+    }
+
+    private void StartEditScore(Guid matchId, int? p1, int? p2)
+    {
+        _editingScores.Add(matchId);
+        _scoreInputs[matchId] = (p1, p2);
+    }
+
+    private void CancelEditScore(Guid matchId)
+    {
+        _editingScores.Remove(matchId);
+        _scoreInputs.Remove(matchId);
+    }
+
+    private async Task SaveEditedScore(Guid matchId)
+    {
+        if (!_scoreInputs.TryGetValue(matchId, out var inputs)) return;
+        if (inputs.p1 is null || inputs.p2 is null) return;
+
+        _firstTurnInputs.TryGetValue(matchId, out var p1WentFirst);
+        _attackerInputs.TryGetValue(matchId, out var p1IsAttacker);
+
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            await RoundService.UpdateScoreAsync(
+                matchId, inputs.p1.Value, inputs.p2.Value,
+                player1IsAttacker: p1IsAttacker,
+                player1WentFirst: p1WentFirst);
+            _editingScores.Remove(matchId);
+            _scoreInputs.Remove(matchId);
+            _firstTurnInputs.Remove(matchId);
+            _attackerInputs.Remove(matchId);
+            foreach (var round in _rounds)
+            {
+                var freshMatches = await RoundService.GetMatchesAsync(round.Id);
+                _matchesByRound[round.Id] = [.. freshMatches];
+            }
+            _statusMessage = "Score updated.";
+        }
+        catch (Exception ex) { _errorMessage = ex.Message; }
+        finally { _saving = false; }
     }
 
     private void SetFirstTurn(Guid matchId, string? value)

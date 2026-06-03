@@ -19,6 +19,7 @@ public class PlayerService(
             Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim().ToLowerInvariant(),
             ArmyFaction = string.IsNullOrWhiteSpace(request.ArmyFaction) ? null : request.ArmyFaction.Trim(),
             ArmyList = string.IsNullOrWhiteSpace(request.ArmyList) ? null : request.ArmyList.Trim(),
+            OrganizationId = request.OrganizationId,
             EditToken = tokenGenerator.RandomUrlSafeString(22),
             RegisteredAt = DateTimeOffset.UtcNow,
             IsDropped = false,

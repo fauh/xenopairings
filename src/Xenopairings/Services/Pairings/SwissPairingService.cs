@@ -18,18 +18,26 @@ public static class SwissPairingService
     /// Generates a list of (Player1, Player2?, TableNumber) pairings.
     /// Player2 is null for a bye.
     /// </summary>
+    /// <param name="avoidPairs">
+    /// Additional pairs to avoid where possible (e.g. same-organisation players in round 1).
+    /// Treated identically to <paramref name="previousMatchups"/> — avoided if an alternative exists,
+    /// but used as a last resort if no other pairing is available.
+    /// </param>
     public static IReadOnlyList<(Player p1, Player? p2, int table)> Generate(
         IReadOnlyList<Player> activePlayers,
         IReadOnlyList<PlayerStanding> currentStandings,
-        IReadOnlyList<(Guid, Guid)> previousMatchups)
+        IReadOnlyList<(Guid, Guid)> previousMatchups,
+        IReadOnlyList<(Guid, Guid)>? avoidPairs = null)
     {
         var players = activePlayers.Where(p => !p.IsDropped).ToList();
 
         if (players.Count == 0)
             return [];
 
+        // Merge previous matchups + same-org avoidance into a single avoid-set
+        var allAvoid = previousMatchups.Concat(avoidPairs ?? []);
         var matchups = new HashSet<(Guid, Guid)>(
-            previousMatchups.Select(m => m.Item1.CompareTo(m.Item2) <= 0
+            allAvoid.Select(m => m.Item1.CompareTo(m.Item2) <= 0
                 ? (m.Item1, m.Item2)
                 : (m.Item2, m.Item1)));
 

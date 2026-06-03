@@ -12,6 +12,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Match> Matches => Set<Match>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamMatchup> TeamMatchups => Set<TeamMatchup>();
+    public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<OrganizationMember> OrganizationMembers => Set<OrganizationMember>();
     public DbSet<PlayerRating> PlayerRatings => Set<PlayerRating>();
     public DbSet<PlayerRatingHistory> PlayerRatingHistories => Set<PlayerRatingHistory>();
 
@@ -47,6 +49,35 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany()
                 .HasForeignKey(x => x.TournamentId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Organization>(o =>
+        {
+            o.HasKey(x => x.Id);
+            o.HasIndex(x => x.InviteToken).IsUnique();
+        });
+
+        modelBuilder.Entity<OrganizationMember>(m =>
+        {
+            m.HasKey(x => x.Id);
+            m.HasIndex(x => new { x.OrganizationId, x.UserId }).IsUnique();
+            m.HasOne(x => x.Organization)
+                .WithMany(o => o.Members)
+                .HasForeignKey(x => x.OrganizationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            m.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Player>(p =>
+        {
+            p.HasOne(x => x.Organization)
+                .WithMany()
+                .HasForeignKey(x => x.OrganizationId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .IsRequired(false);
         });
 
         modelBuilder.Entity<Round>(r =>

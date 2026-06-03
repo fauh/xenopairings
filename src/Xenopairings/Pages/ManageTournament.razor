@@ -9,6 +9,7 @@
 @inject IPlayerService PlayerService
 @inject IRoundService RoundService
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Manage — Xenopairings</PageTitle>
 
@@ -244,18 +245,106 @@ else
                 @if (!round.IsComplete)
                 {
                     var allScored = matches.All(m => m.IsScored);
-                    <div class="card-footer">
+                    var anyScored = matches.Any(m => m.IsScored && m.Player2Id != null);
+                    <div class="card-footer d-flex flex-wrap gap-2 align-items-center">
                         <button class="btn btn-sm btn-success"
                                 disabled="@(!allScored || _saving)"
                                 @onclick="() => CompleteRound(round.Id)"
                                 title="@(allScored ? "" : "Enter all scores first")">
                             Complete round @round.RoundNumber
                         </button>
-                        @if (!allScored)
+
+                        @if (!anyScored)
                         {
-                            <small class="text-muted ms-2">Enter all scores to complete the round.</small>
+                            @* Re-pair random *@
+                            @if (!_confirmRepair.Contains(round.Id))
+                            {
+                                <button class="btn btn-sm btn-outline-warning"
+                                        @onclick="() => _confirmRepair.Add(round.Id)"
+                                        disabled="@_saving">
+                                    🔀 Re-pair randomly
+                                </button>
+                            }
+                            else
+                            {
+                                <span class="text-warning small">Re-pair? All pairings will be regenerated.</span>
+                                <button class="btn btn-sm btn-warning me-1"
+                                        @onclick="() => RepairRandom(round.Id)" disabled="@_saving">Yes, re-pair</button>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        @onclick="() => _confirmRepair.Remove(round.Id)">Cancel</button>
+                            }
+
+                            @* Manual pairing *@
+                            <button class="btn btn-sm btn-outline-secondary"
+                                    @onclick="() => ToggleManualPairing(round.Id)"
+                                    disabled="@_saving">
+                                @(_manualRoundId == round.Id ? "✕ Cancel manual pairing" : "✏ Manual pairing")
+                            </button>
                         }
+
+                        @if (!allScored && !anyScored && _manualRoundId == round.Id) { @* spacer *@ }
+                        else if (!allScored) { <small class="text-muted">Enter all scores to complete.</small> }
                     </div>
+
+                    @* Manual pairing panel *@
+                    @if (_manualRoundId == round.Id)
+                    {
+                        <div class="card-body border-top">
+                            <h6 class="mb-3">Manual pairing — assign players to tables</h6>
+                            @if (!string.IsNullOrEmpty(_manualError))
+                            {
+                                <div class="alert alert-danger py-2 small mb-3">@_manualError</div>
+                            }
+                            @for (var ti = 0; ti < _manualPairings.Count; ti++)
+                            {
+                                var idx = ti;
+                                var pair = _manualPairings[idx];
+                                var activePlayers = _players.Where(p => !p.IsDropped).ToList();
+                                <div class="row g-2 align-items-center mb-2">
+                                    <div class="col-auto">
+                                        <span class="text-muted small">Table @(idx + 1)</span>
+                                    </div>
+                                    <div class="col">
+                                        <select class="form-select form-select-sm"
+                                                @onchange="e => SetManualPlayer(idx, true, e.Value?.ToString())">
+                                            <option value="">— Player 1 —</option>
+                                            @foreach (var p in activePlayers)
+                                            {
+                                                <option value="@p.Id" selected="@(p.Id == pair.p1)">@p.Name</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="col-auto text-muted">vs</div>
+                                    <div class="col">
+                                        <select class="form-select form-select-sm"
+                                                @onchange="e => SetManualPlayer(idx, false, e.Value?.ToString())">
+                                            <option value="">— Bye —</option>
+                                            @foreach (var p in activePlayers)
+                                            {
+                                                <option value="@p.Id" selected="@(p.Id == pair.p2)">@p.Name</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    @if (idx > 0)
+                                    {
+                                        <div class="col-auto">
+                                            <button class="btn btn-sm btn-outline-danger"
+                                                    @onclick="() => RemoveManualRow(idx)">✕</button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            <div class="mt-2 d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        @onclick="AddManualRow">+ Add table</button>
+                                <button class="btn btn-sm btn-primary"
+                                        @onclick="() => ConfirmManualPairing(round.Id)"
+                                        disabled="@_saving">
+                                    Confirm pairings
+                                </button>
+                            </div>
+                        </div>
+                    }
                 }
             </div>
         </div>
@@ -321,6 +410,11 @@ else
     private bool _loading = true;
     private bool _saving;
     private bool _confirmEnd;
+    private HashSet<Guid> _confirmRepair = [];
+    // Manual pairing state
+    private Guid? _manualRoundId;
+    private List<(Guid? p1, Guid? p2)> _manualPairings = [];
+    private string? _manualError;
     private string? _statusMessage;
     private string? _errorMessage;
     private string? _newMissionLayout;
@@ -357,6 +451,73 @@ else
             var matches = await RoundService.GetMatchesAsync(round.Id);
             _matchesByRound[round.Id] = [.. matches];
         }
+    }
+
+    private async Task RepairRandom(Guid roundId)
+    {
+        _saving = true;
+        _confirmRepair.Remove(roundId);
+        _errorMessage = null;
+        try
+        {
+            await RoundService.RepairRandomAsync(roundId);
+            await LoadAllAsync();
+            _statusMessage = "Round re-paired randomly.";
+        }
+        catch (Exception ex) { _errorMessage = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private void ToggleManualPairing(Guid roundId)
+    {
+        if (_manualRoundId == roundId)
+        {
+            _manualRoundId = null;
+            _manualPairings = [];
+            _manualError = null;
+        }
+        else
+        {
+            _manualRoundId = roundId;
+            _manualError = null;
+            // Pre-populate with empty slots matching the current round's match count
+            var roundMatches = _matchesByRound.GetValueOrDefault(roundId, []);
+            var count = Math.Max(roundMatches.Count, (_players.Count(p => !p.IsDropped) + 1) / 2);
+            _manualPairings = Enumerable.Range(0, count).Select(_ => ((Guid?)null, (Guid?)null)).ToList();
+        }
+    }
+
+    private void SetManualPlayer(int idx, bool isP1, string? val)
+    {
+        var parsed = Guid.TryParse(val, out var g) ? (Guid?)g : null;
+        var (p1, p2) = _manualPairings[idx];
+        _manualPairings[idx] = isP1 ? (parsed, p2) : (p1, parsed);
+    }
+
+    private void AddManualRow() =>
+        _manualPairings.Add((null, null));
+
+    private void RemoveManualRow(int idx) =>
+        _manualPairings.RemoveAt(idx);
+
+    private async Task ConfirmManualPairing(Guid roundId)
+    {
+        _saving = true;
+        _manualError = null;
+        try
+        {
+            var pairings = _manualPairings
+                .Where(p => p.p1.HasValue)
+                .Select((p, i) => (player1Id: p.p1!.Value, player2Id: p.p2, tableNumber: i + 1))
+                .ToList();
+            await RoundService.SetManualPairingsAsync(roundId, pairings);
+            _manualRoundId = null;
+            _manualPairings = [];
+            await LoadAllAsync();
+            _statusMessage = "Manual pairings saved.";
+        }
+        catch (Exception ex) { _manualError = ex.Message; }
+        finally { _saving = false; }
     }
 
     private async Task StartEvent()

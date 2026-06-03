@@ -1,0 +1,150 @@
+@page "/organizations/{OrgId:guid}"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Xenopairings.Models
+@using Xenopairings.Services.Auth
+@using Xenopairings.Services.Elo
+@using Xenopairings.Services.Organizations
+@inject IOrganizationService OrgService
+@inject IAuthService AuthService
+@inject IEloService EloService
+@inject NavigationManager Nav
+
+<PageTitle>@(_org?.Name ?? "Organization") — Xenopairings</PageTitle>
+
+@if (_loading)
+{
+    <LoadingSpinner />
+}
+else if (_org is null)
+{
+    <div class="empty-state">
+        <div class="empty-state-icon">🏰</div>
+        <h3>Organization not found</h3>
+        <a href="/organizations" class="btn btn-outline-secondary mt-2">Back</a>
+    </div>
+}
+else
+{
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/organizations">Organizations</a></li>
+            <li class="breadcrumb-item active">@_org.Name</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+        <h1 class="mb-0">@_org.Name</h1>
+        @if (_isMember)
+        {
+            <button class="btn btn-outline-danger btn-sm" @onclick="Leave">Leave organization</button>
+        }
+    </div>
+
+    @* Invite code — only for members *@
+    @if (_isMember)
+    {
+        <div class="card mb-4" style="max-width:480px">
+            <div class="card-body">
+                <h2 class="h6 card-title">Invite others</h2>
+                <div class="input-group">
+                    <input type="text" class="form-control font-monospace" readonly value="@_org.InviteToken" id="invite-code" />
+                    <button class="btn btn-outline-secondary" @onclick="CopyInviteCode">Copy</button>
+                </div>
+                @if (_copied) { <small class="text-success">Copied!</small> }
+                <div class="form-text">Share this code. Others paste it on the Organizations page.</div>
+            </div>
+        </div>
+    }
+
+    @* Members list *@
+    <h2 class="h5">Members (@_org.Members.Count)</h2>
+    @if (!_org.Members.Any())
+    {
+        <p class="text-muted">No members yet.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr><th>Player</th><th class="text-end">ELO</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var member in _org.Members.OrderBy(m => m.User.Email))
+                    {
+                        var rating = _ratings.GetValueOrDefault(member.User.Email);
+                        <tr>
+                            <td>
+                                @if (rating is not null && rating.IsProfilePublic)
+                                {
+                                    <a href="/player/@rating.Id">@rating.DisplayName</a>
+                                }
+                                else
+                                {
+                                    <span>@(rating?.DisplayName ?? member.User.Email)</span>
+                                }
+                                @if (member.UserId == _org.CreatedByUserId)
+                                {
+                                    <span class="badge text-bg-secondary ms-1 small">founder</span>
+                                }
+                            </td>
+                            <td class="text-end text-muted">
+                                @(rating is not null ? ((int)Math.Round(rating.Rating)).ToString() : "—")
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid OrgId { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private Organization? _org;
+    private bool _loading = true;
+    private bool _isMember;
+    private Guid? _userId;
+    private Dictionary<string, PlayerRating> _ratings = [];
+    private bool _copied;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateTask;
+        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+        if (email is not null)
+        {
+            var user = await AuthService.GetByEmailAsync(email);
+            _userId = user?.Id;
+        }
+
+        _org = await OrgService.GetByIdAsync(OrgId);
+        if (_org is not null)
+        {
+            _isMember = _userId.HasValue && _org.Members.Any(m => m.UserId == _userId.Value);
+
+            var leaderboard = await EloService.GetLeaderboardAsync();
+            _ratings = leaderboard.ToDictionary(r => r.Email, StringComparer.OrdinalIgnoreCase);
+        }
+        _loading = false;
+    }
+
+    private async Task Leave()
+    {
+        if (_org is null || _userId is null) return;
+        await OrgService.LeaveAsync(_org.Id, _userId.Value);
+        Nav.NavigateTo("/organizations");
+    }
+
+    private async Task CopyInviteCode()
+    {
+        if (_org is null) return;
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", _org.InviteToken);
+        _copied = true;
+        StateHasChanged();
+    }
+}

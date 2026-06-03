@@ -12,6 +12,7 @@ using Xenopairings.Data;
 using Xenopairings.Models;
 using Xenopairings.Services;
 using Xenopairings.Services.Auth;
+using Xenopairings.Services.Organizations;
 using Xenopairings.Services.Backups;
 using Xenopairings.Services.Elo;
 using Xenopairings.Services.Email;
@@ -146,6 +147,7 @@ builder.Services.AddScoped<IRoundService, RoundService>();
 // RoundService takes IEmailSender + IOptions<EmailSettings> — already registered above
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IOrganizationService, OrganizationService>();
 builder.Services.AddScoped<IEloService, EloService>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 

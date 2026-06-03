@@ -1,0 +1,162 @@
+@page "/organizations"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Xenopairings.Models
+@using Xenopairings.Services.Auth
+@using Xenopairings.Services.Organizations
+@inject IOrganizationService OrgService
+@inject IAuthService AuthService
+@inject NavigationManager Nav
+
+<PageTitle>Organizations — Xenopairings</PageTitle>
+
+@if (_loading)
+{
+    <LoadingSpinner />
+}
+else if (_userId is null)
+{
+    <div class="alert alert-warning">
+        <a href="/login">Sign in</a> to create or join organizations.
+    </div>
+}
+else
+{
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <h1>Organizations</h1>
+        <button class="btn btn-primary btn-sm" @onclick="() => _showCreate = !_showCreate">
+            + Create organization
+        </button>
+    </div>
+
+    @if (_showCreate)
+    {
+        <div class="card mb-4" style="max-width:480px">
+            <div class="card-body">
+                <h2 class="h6 card-title">New organization</h2>
+                <div class="mb-3">
+                    <input class="form-control" @bind="_newOrgName" placeholder="Organization name" maxlength="100" />
+                </div>
+                @if (!string.IsNullOrEmpty(_createError))
+                {
+                    <div class="alert alert-danger py-2 small">@_createError</div>
+                }
+                <button class="btn btn-primary btn-sm me-2" @onclick="CreateOrg" disabled="@_saving">Create</button>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="() => _showCreate = false">Cancel</button>
+            </div>
+        </div>
+    }
+
+    @* Join with invite code *@
+    <div class="card mb-4" style="max-width:480px">
+        <div class="card-body">
+            <h2 class="h6 card-title">Join with invite code</h2>
+            <div class="input-group">
+                <input class="form-control" @bind="_joinCode" placeholder="Paste invite code" />
+                <button class="btn btn-outline-primary" @onclick="JoinByCode" disabled="@_saving">Join</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_joinError))
+            {
+                <div class="alert alert-danger py-2 small mt-2">@_joinError</div>
+            }
+            @if (_joinSuccess)
+            {
+                <div class="alert alert-success py-2 small mt-2">Joined!</div>
+            }
+        </div>
+    </div>
+
+    @if (!_orgs.Any())
+    {
+        <div class="empty-state">
+            <div class="empty-state-icon">🏰</div>
+            <h3>No organizations yet</h3>
+            <p>Create one or join with an invite code.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var org in _orgs)
+            {
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title mb-1">
+                                <a href="/organizations/@org.Id">@org.Name</a>
+                            </h5>
+                            <p class="text-muted small mb-2">@org.Members.Count member@(org.Members.Count == 1 ? "" : "s")</p>
+                            <a href="/organizations/@org.Id" class="btn btn-sm btn-outline-secondary">View →</a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private List<Organization> _orgs = [];
+    private bool _loading = true;
+    private bool _saving;
+    private Guid? _userId;
+
+    private bool _showCreate;
+    private string? _newOrgName;
+    private string? _createError;
+
+    private string? _joinCode;
+    private string? _joinError;
+    private bool _joinSuccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateTask;
+        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+        if (email is not null)
+        {
+            var user = await AuthService.GetByEmailAsync(email);
+            _userId = user?.Id;
+        }
+        if (_userId.HasValue)
+            _orgs = [.. await OrgService.ListByUserAsync(_userId.Value)];
+        _loading = false;
+    }
+
+    private async Task CreateOrg()
+    {
+        if (_userId is null || string.IsNullOrWhiteSpace(_newOrgName)) return;
+        _saving = true;
+        _createError = null;
+        try
+        {
+            var org = await OrgService.CreateAsync(_newOrgName!, _userId.Value);
+            _orgs = [.. await OrgService.ListByUserAsync(_userId.Value)];
+            _newOrgName = null;
+            _showCreate = false;
+        }
+        catch (Exception ex) { _createError = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private async Task JoinByCode()
+    {
+        if (_userId is null || string.IsNullOrWhiteSpace(_joinCode)) return;
+        _saving = true;
+        _joinError = null;
+        _joinSuccess = false;
+        try
+        {
+            var org = await OrgService.GetByInviteTokenAsync(_joinCode!.Trim());
+            if (org is null) { _joinError = "Invalid invite code."; return; }
+            await OrgService.JoinAsync(org.Id, _userId.Value);
+            _orgs = [.. await OrgService.ListByUserAsync(_userId.Value)];
+            _joinCode = null;
+            _joinSuccess = true;
+        }
+        catch (Exception ex) { _joinError = ex.Message; }
+        finally { _saving = false; }
+    }
+}

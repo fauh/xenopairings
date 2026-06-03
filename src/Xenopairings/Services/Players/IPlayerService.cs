@@ -18,5 +18,6 @@ public record RegisterPlayerRequest(
     string Name,
     string? Email,
     string? ArmyFaction,
-    string? ArmyList
+    string? ArmyList,
+    Guid? OrganizationId = null
 );

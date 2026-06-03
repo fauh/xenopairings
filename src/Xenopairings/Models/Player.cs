@@ -14,4 +14,7 @@ public class Player
     public bool IsDropped { get; set; }  // withdrawn from tournament mid-event
     public Guid? TeamId { get; set; }
     public Team? Team { get; set; }
+    /// <summary>The organization the player chose to represent in this tournament. Null = none.</summary>
+    public Guid? OrganizationId { get; set; }
+    public Organization? Organization { get; set; }
 }

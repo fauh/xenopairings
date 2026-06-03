@@ -62,9 +62,25 @@ public sealed class RoundService(
             .Select(m => new { m.Player1Id, m.Player2Id })
             .ToListAsync();
 
+        // Round 1: avoid pairing players from the same organisation where possible
+        List<(Guid, Guid)>? sameOrgAvoid = null;
+        if (roundNumber == 1)
+        {
+            sameOrgAvoid = activePlayers
+                .Where(p => p.OrganizationId.HasValue)
+                .GroupBy(p => p.OrganizationId!.Value)
+                .SelectMany(g =>
+                {
+                    var ids = g.Select(p => p.Id).ToList();
+                    return ids.SelectMany((a, i) => ids.Skip(i + 1).Select(b => (a, b)));
+                })
+                .ToList();
+        }
+
         var pairings = SwissPairingService.Generate(
             activePlayers, standings,
-            previousPairs.Select(m => (m.Player1Id!.Value, m.Player2Id!.Value)).ToList());
+            previousPairs.Select(m => (m.Player1Id!.Value, m.Player2Id!.Value)).ToList(),
+            sameOrgAvoid);
 
         var round = CreateRoundEntity(tournament.Id, roundNumber, missionLayout);
         db.Rounds.Add(round);
@@ -221,6 +237,129 @@ public sealed class RoundService(
                 }
             }
         }
+    }
+
+    // ── Re-pairing ────────────────────────────────────────────────────────────
+
+    public async Task RepairRandomAsync(Guid roundId)
+    {
+        var round = await db.Rounds
+            .Include(r => r.Tournament)
+            .FirstOrDefaultAsync(r => r.Id == roundId)
+            ?? throw new InvalidOperationException("Round not found.");
+
+        var scored = await db.Matches.AnyAsync(m => m.RoundId == roundId && m.IsScored && m.Player2Id != null);
+        if (scored)
+            throw new InvalidOperationException("Cannot re-pair: scores have already been entered for this round.");
+
+        // Delete existing matches
+        var existing = await db.Matches.Where(m => m.RoundId == roundId).ToListAsync();
+        db.Matches.RemoveRange(existing);
+
+        // Also clear team matchups if any
+        var existingTm = await db.TeamMatchups.Where(tm => tm.RoundId == roundId).ToListAsync();
+        db.TeamMatchups.RemoveRange(existingTm);
+
+        await db.SaveChangesAsync();
+
+        // Regenerate using the standard flow (routing through tournament)
+        var tournament = round.Tournament;
+        var allRounds = await db.Rounds
+            .Where(r => r.TournamentId == tournament.Id && r.Id != roundId)
+            .OrderBy(r => r.RoundNumber).ToListAsync();
+
+        if (tournament.IsTeamEvent)
+        {
+            await CreateTeamRoundAsync(tournament, round.RoundNumber, round.MissionLayout);
+        }
+        else
+        {
+            var activePlayers = await db.Players
+                .Where(p => p.TournamentId == tournament.Id && !p.IsDropped)
+                .ToListAsync();
+            var standings = await standingsService.ComputeAsync(tournament.Id, tournament.ScoringSystem);
+            var previousPairs = await db.Matches
+                .Include(m => m.Round)
+                .Where(m => m.Round.TournamentId == tournament.Id
+                         && m.Round.Id != roundId
+                         && m.Player1Id != null && m.Player2Id != null)
+                .Select(m => new { m.Player1Id, m.Player2Id })
+                .ToListAsync();
+
+            List<(Guid, Guid)>? sameOrgAvoid = null;
+            if (round.RoundNumber == 1)
+            {
+                sameOrgAvoid = activePlayers
+                    .Where(p => p.OrganizationId.HasValue)
+                    .GroupBy(p => p.OrganizationId!.Value)
+                    .SelectMany(g => { var ids = g.Select(p => p.Id).ToList(); return ids.SelectMany((a, i) => ids.Skip(i + 1).Select(b => (a, b))); })
+                    .ToList();
+            }
+
+            var pairings = SwissPairingService.Generate(
+                activePlayers, standings,
+                previousPairs.Select(m => (m.Player1Id!.Value, m.Player2Id!.Value)).ToList(),
+                sameOrgAvoid);
+
+            foreach (var (p1, p2, table) in pairings)
+            {
+                db.Matches.Add(new Match
+                {
+                    Id = Guid.NewGuid(),
+                    RoundId = roundId,
+                    TableNumber = table,
+                    Player1Id = p1.Id,
+                    Player2Id = p2?.Id,
+                    IsScored = p2 is null,
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        logger.LogInformation("Re-paired round {RoundId} randomly.", roundId);
+    }
+
+    public async Task SetManualPairingsAsync(
+        Guid roundId,
+        IReadOnlyList<(Guid player1Id, Guid? player2Id, int tableNumber)> pairings)
+    {
+        var round = await db.Rounds.FindAsync(roundId)
+            ?? throw new InvalidOperationException("Round not found.");
+
+        var scored = await db.Matches.AnyAsync(m => m.RoundId == roundId && m.IsScored && m.Player2Id != null);
+        if (scored)
+            throw new InvalidOperationException("Cannot change pairings: scores have already been entered.");
+
+        // Validate: no player twice, no duplicate tables
+        var allPlayerIds = pairings
+            .SelectMany(p => new[] { (Guid?)p.player1Id, p.player2Id })
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToList();
+        if (allPlayerIds.Count != allPlayerIds.Distinct().Count())
+            throw new ArgumentException("A player appears in more than one match.");
+        var tables = pairings.Select(p => p.tableNumber).ToList();
+        if (tables.Count != tables.Distinct().Count())
+            throw new ArgumentException("Duplicate table numbers.");
+
+        // Replace matches
+        var existing = await db.Matches.Where(m => m.RoundId == roundId).ToListAsync();
+        db.Matches.RemoveRange(existing);
+
+        foreach (var (p1, p2, table) in pairings)
+        {
+            db.Matches.Add(new Match
+            {
+                Id = Guid.NewGuid(),
+                RoundId = roundId,
+                TableNumber = table,
+                Player1Id = p1,
+                Player2Id = p2,
+                IsScored = p2 is null,  // bye auto-scored
+            });
+        }
+        await db.SaveChangesAsync();
+        logger.LogInformation("Manual pairings set for round {RoundId} with {Count} matches.", roundId, pairings.Count);
     }
 
     // ── Email helpers ─────────────────────────────────────────────────────────

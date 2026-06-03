@@ -49,6 +49,24 @@ public interface IRoundService
     /// </summary>
     Task CompleteRoundAsync(Guid roundId);
 
+    // ── Re-pairing ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Deletes all matches in the round and regenerates pairings randomly.
+    /// Throws if any match in the round has already been scored.
+    /// </summary>
+    Task RepairRandomAsync(Guid roundId);
+
+    /// <summary>
+    /// Replaces all match rows in the round with the provided manual pairings.
+    /// Each entry is (player1Id, player2Id?, tableNumber). Player2Id null = bye.
+    /// Throws if any existing match in the round has been scored, or if a player
+    /// appears more than once, or if table numbers are not unique.
+    /// </summary>
+    Task SetManualPairingsAsync(
+        Guid roundId,
+        IReadOnlyList<(Guid player1Id, Guid? player2Id, int tableNumber)> pairings);
+
     // ── Team-event additions ──────────────────────────────────────────────────
 
     /// <summary>Returns the team matchups for a round with Team1, Team2 loaded.</summary>

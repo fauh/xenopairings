@@ -13,6 +13,7 @@
         <AuthorizeView>
             <Authorized>
                 <NavLink class="nav-link" href="/dashboard">Dashboard</NavLink>
+                <NavLink class="nav-link" href="/organizations">Organizations</NavLink>
                 <form method="post" action="/logout" style="display:inline">
                     @* Antiforgery token required for the logout POST *@
                     <AntiforgeryToken />

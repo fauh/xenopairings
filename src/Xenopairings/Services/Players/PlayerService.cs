@@ -84,7 +84,7 @@ public class PlayerService(
         await db.SaveChangesAsync();
     }
 
-    public async Task UpdateRegistrationAsync(Guid playerId, string? armyFaction, string? armyList)
+    public async Task UpdateRegistrationAsync(Guid playerId, string? armyFaction, string? armyList, Guid? organizationId = null)
     {
         var player = await db.Players.FindAsync(playerId);
         if (player is null)
@@ -95,6 +95,7 @@ public class PlayerService(
 
         player.ArmyFaction = string.IsNullOrWhiteSpace(armyFaction) ? null : armyFaction.Trim();
         player.ArmyList = string.IsNullOrWhiteSpace(armyList) ? null : armyList.Trim();
+        player.OrganizationId = organizationId;
         await db.SaveChangesAsync();
     }
 }

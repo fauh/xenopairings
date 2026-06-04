@@ -4,10 +4,13 @@
 @using Xenopairings.Models
 @using Xenopairings.Services.Players
 @using Xenopairings.Services.Tournaments
+@using Xenopairings.Services.Auth
+@using Xenopairings.Services.Organizations
 @inject IPlayerService PlayerService
 @inject ITournamentService TournamentService
+@inject IAuthService AuthService
+@inject IOrganizationService OrgService
 @inject NavigationManager Nav
-@* ArmyListLocked check requires loading the tournament *@
 
 <PageTitle>Edit registration — Xenopairings</PageTitle>
 
@@ -78,6 +81,23 @@ else
                           disabled="@_armyListLocked"></textarea>
             </div>
 
+            @if (_userOrgs.Any())
+            {
+                <div class="mb-3">
+                    <label class="form-label" for="editOrg">
+                        Representing organization <span class="text-muted">(optional)</span>
+                    </label>
+                    <select id="editOrg" class="form-select"
+                            @onchange="e => _selectedOrgId = e.Value is string s && Guid.TryParse(s, out var g) ? g : null">
+                        <option value="" selected="@(_selectedOrgId is null)">— None —</option>
+                        @foreach (var org in _userOrgs)
+                        {
+                            <option value="@org.Id" selected="@(_selectedOrgId == org.Id)">@org.Name</option>
+                        }
+                    </select>
+                </div>
+            }
+
             @if (_saveSuccess)
             {
                 <div class="alert alert-success py-2" role="alert">Saved!</div>
@@ -123,6 +143,8 @@ else
     private bool _armyListLocked;
     private bool _loading = true;
     private bool _notAuthed;
+    private List<Organization> _userOrgs = [];
+    private Guid? _selectedOrgId;
     private bool _saving;
     private bool _saveSuccess;
     private bool _withdrawConfirm;
@@ -156,7 +178,16 @@ else
         {
             _editFaction = _player.ArmyFaction;
             _editArmyList = _player.ArmyList;
+            _selectedOrgId = _player.OrganizationId;
             _armyListLocked = _tournament?.ArmyListLocked ?? false;
+        }
+
+        // Load user's organizations for the org picker
+        if (email is not null)
+        {
+            var user = await AuthService.GetByEmailAsync(email);
+            if (user is not null)
+                _userOrgs = [.. await OrgService.ListByUserAsync(user.Id)];
         }
 
         _loading = false;
@@ -171,7 +202,7 @@ else
         _saveError = null;
         try
         {
-            await PlayerService.UpdateRegistrationAsync(_player.Id, _editFaction, _editArmyList);
+            await PlayerService.UpdateRegistrationAsync(_player.Id, _editFaction, _editArmyList, _selectedOrgId);
             _player.ArmyFaction = string.IsNullOrWhiteSpace(_editFaction) ? null : _editFaction.Trim();
             _player.ArmyList = string.IsNullOrWhiteSpace(_editArmyList) ? null : _editArmyList.Trim();
             _saveSuccess = true;

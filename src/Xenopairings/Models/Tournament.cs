@@ -42,11 +42,20 @@ public class Tournament
         Converters = { new JsonStringEnumConverter() },
     };
 
-    /// <summary>Convenience accessor — deserialises TiebreakersJson.</summary>
+    private static readonly IReadOnlyList<TiebreakerType> DefaultTiebreakers =
+        [TiebreakerType.Points, TiebreakerType.StrengthOfSchedule, TiebreakerType.Random];
+
+    /// <summary>Convenience accessor — deserialises TiebreakersJson. Falls back to defaults on empty/invalid JSON.</summary>
     [System.ComponentModel.DataAnnotations.Schema.NotMapped]
-    public IReadOnlyList<TiebreakerType> Tiebreakers =>
-        JsonSerializer.Deserialize<List<TiebreakerType>>(TiebreakersJson, TbJsonOpts)
-        ?? [TiebreakerType.Points];
+    public IReadOnlyList<TiebreakerType> Tiebreakers
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(TiebreakersJson)) return DefaultTiebreakers;
+            try { return JsonSerializer.Deserialize<List<TiebreakerType>>(TiebreakersJson, TbJsonOpts) ?? DefaultTiebreakers; }
+            catch { return DefaultTiebreakers; }
+        }
+    }
 
     internal static string SerializeTiebreakers(IEnumerable<TiebreakerType> tbs) =>
         JsonSerializer.Serialize(tbs.ToList(), TbJsonOpts);

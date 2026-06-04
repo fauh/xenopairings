@@ -310,7 +310,7 @@ else
                             <td>@(player.Email ?? "—")</td>
                             <td>@(player.IsDropped ? "Dropped" : "Active")</td>
                             <td>
-                                @if (!player.IsDropped)
+                                @if (!player.IsDropped && _tournament.Status != TournamentStatus.Ended)
                                 {
                                     <button class="btn btn-sm btn-outline-danger"
                                             @onclick="() => DropPlayer(player.Id)"

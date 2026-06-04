@@ -49,12 +49,18 @@ public class PlayerService(
 
     public async Task DropAsync(Guid playerId)
     {
-        var player = await db.Players.FindAsync(playerId);
+        var player = await db.Players
+            .Include(p => p.Tournament)
+            .FirstOrDefaultAsync(p => p.Id == playerId);
+
         if (player is null)
         {
             logger.LogWarning("DropAsync: player {PlayerId} not found.", playerId);
             return;
         }
+
+        if (player.Tournament.Status == Models.TournamentStatus.Ended)
+            throw new InvalidOperationException("Cannot drop a player from an ended tournament.");
 
         player.IsDropped = true;
         await db.SaveChangesAsync();

@@ -11,6 +11,8 @@
 @using Xenopairings.Services.Auth
 @using Xenopairings.Services.Organizations
 @using Xenopairings.Services.Reports
+@using Xenopairings.Services.Teams
+@using Xenopairings.Services.Organizations
 @inject ITournamentService TournamentService
 @inject IPlayerService PlayerService
 @inject IRoundService RoundService
@@ -19,6 +21,7 @@
 @inject IAuthService AuthService
 @inject IOrganizationService OrgService
 @inject IPlayerReportService PlayerReportService
+@inject ITeamService TeamService
 @inject NavigationManager Nav
 
 <PageTitle>@(_tournament?.Title ?? "Tournament") — Xenopairings</PageTitle>
@@ -60,8 +63,195 @@ else
         </small>
     </div>
 
-    @* ── Registration ──────────────────────────────────────────────────────────── *@
-    @if (_tournament.RegistrationOpen && _tournament.Status == TournamentStatus.Upcoming && !_myRegistrationSuccess)
+    @* ── Team registration + management (team events) ──────────────────────────── *@
+    @if (_tournament.IsTeamEvent)
+    {
+        @if (_myTeam is not null)
+        {
+            @* Member: show team info. Captain: show full management. *@
+            <div class="card mb-4" style="max-width:600px">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <strong>@_myTeam.Name</strong>
+                    <span class="badge text-bg-secondary">
+                        @_myTeam.Players.Count(p => !p.IsDropped) / @_tournament.TeamSize players
+                    </span>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(_teamError))   { <div class="alert alert-danger py-2 small">@_teamError</div> }
+                    @if (!string.IsNullOrEmpty(_teamSuccess)) { <div class="alert alert-success py-2 small">@_teamSuccess</div> }
+
+                    @* Member list *@
+                    <ul class="list-group list-group-flush mb-3">
+                        @foreach (var p in _myTeam.Players.Where(p => !p.IsDropped))
+                        {
+                            <li class="list-group-item d-flex align-items-center justify-content-between px-0">
+                                <span>
+                                    @p.Name
+                                    @if (_myTeam.CaptainPlayerId == p.Id)
+                                    {
+                                        <span class="badge text-bg-warning ms-1 small">Captain</span>
+                                    }
+                                    @if (p.Id == _myPlayerId)
+                                    {
+                                        <span class="badge text-bg-primary ms-1 small">you</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(p.ArmyFaction))
+                                    {
+                                        <span class="text-muted small ms-2">@p.ArmyFaction</span>
+                                    }
+                                </span>
+                                @if (_isCaptain && p.Id != _myPlayerId)
+                                {
+                                    <span class="d-flex gap-1">
+                                        @if (_confirmRemovePlayer == p.Id)
+                                        {
+                                            <button class="btn btn-sm btn-danger" @onclick="() => RemoveTeamPlayer(p.Id)" disabled="@_teamBusy">Remove</button>
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => _confirmRemovePlayer = null">Cancel</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => _editingMember = (_editingMember == p.Id ? null : p.Id)" title="Edit member">✏</button>
+                                            <button class="btn btn-sm btn-outline-warning" @onclick="() => TransferCaptain(p.Id)" disabled="@_teamBusy" title="Make captain">👑</button>
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => _confirmRemovePlayer = p.Id" title="Remove">✕</button>
+                                        }
+                                    </span>
+                                }
+                            </li>
+                            @if (_isCaptain && _editingMember == p.Id)
+                            {
+                                <li class="list-group-item px-0 py-2">
+                                    <div class="d-flex gap-2 align-items-end flex-wrap">
+                                        <div>
+                                            <label class="form-label small mb-1">Faction</label>
+                                            <input class="form-control form-control-sm" style="width:160px"
+                                                   @bind="_editMemberFaction" placeholder="e.g. Space Marines" />
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <label class="form-label small mb-1">Army list</label>
+                                            <textarea class="form-control form-control-sm" rows="2"
+                                                      @bind="_editMemberArmyList" placeholder="Paste army list…"></textarea>
+                                        </div>
+                                        <button class="btn btn-sm btn-primary align-self-end" @onclick="() => SaveMemberEdit(p.Id)" disabled="@_teamBusy">Save</button>
+                                        <button class="btn btn-sm btn-outline-secondary align-self-end" @onclick="() => _editingMember = null">Cancel</button>
+                                    </div>
+                                </li>
+                            }
+                        }
+                    </ul>
+
+                    @if (_isCaptain)
+                    {
+                        @* Invite link *@
+                        <div class="mb-3">
+                            <label class="form-label small">Invite link</label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control font-monospace" readonly
+                                       value="@($"{Nav.BaseUri.TrimEnd('/')}/t/{Slug}/join-team?code={_myTeam.InviteToken}")" />
+                                <button class="btn btn-outline-secondary" @onclick="CopyInviteLink">Copy</button>
+                            </div>
+                            @if (_inviteCopied) { <small class="text-success">Copied!</small> }
+                        </div>
+
+                        @* Add player manually *@
+                        <details class="mb-3">
+                            <summary class="small text-muted" style="cursor:pointer">+ Add player manually</summary>
+                            <div class="mt-2 d-flex gap-2 flex-wrap">
+                                <input class="form-control form-control-sm" style="width:160px"
+                                       @bind="_addName" placeholder="Name *" maxlength="200" />
+                                <input class="form-control form-control-sm" style="width:200px"
+                                       @bind="_addEmail" placeholder="Email (optional)" type="email" />
+                                <button class="btn btn-sm btn-primary" @onclick="AddPlayerManually"
+                                        disabled="@(string.IsNullOrWhiteSpace(_addName) || _teamBusy)">
+                                    Add
+                                </button>
+                            </div>
+                        </details>
+
+                        @* Invite from organizations *@
+                        @if (_userOrgs.Any())
+                        {
+                            <details class="mb-2">
+                                <summary class="small text-muted" style="cursor:pointer">+ Invite from your organizations</summary>
+                                @foreach (var org in _userOrgs)
+                                {
+                                    var invitable = OrgMembersNotOnTeam(org);
+                                    @if (invitable.Any())
+                                    {
+                                        <div class="mt-2">
+                                            <div class="small fw-semibold mb-1">@org.Name</div>
+                                            @foreach (var member in invitable)
+                                            {
+                                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                                    <span class="small">@(member.DisplayName ?? member.Email)</span>
+                                                    <button class="btn btn-sm btn-outline-primary py-0 px-2"
+                                                            @onclick="() => InviteOrgMember(member.Email)"
+                                                            disabled="@_teamBusy">
+                                                        Add
+                                                    </button>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                }
+                            </details>
+                        }
+                    }
+                </div>
+            </div>
+        }
+        else if (_tournament.RegistrationOpen && _tournament.Status == TournamentStatus.Upcoming && _sessionEmail is not null)
+        {
+            @* Not on a team yet — create or join *@
+            <div class="card mb-4" style="max-width:500px">
+                <div class="card-body">
+                    <h2 class="h5 card-title">Join this tournament</h2>
+                    <p class="text-muted small">This is a team event — create a new team or join an existing one.</p>
+
+                    @if (!string.IsNullOrEmpty(_teamError))
+                    {
+                        <div class="alert alert-danger py-2 small">@_teamError</div>
+                    }
+
+                    @* Create team *@
+                    <div class="mb-4">
+                        <label class="form-label small fw-semibold">Create a team</label>
+                        <div class="input-group">
+                            <input class="form-control" @bind="_newTeamName" maxlength="100"
+                                   placeholder="Team name" />
+                            <button class="btn btn-primary"
+                                    @onclick="CreateTeam"
+                                    disabled="@(string.IsNullOrWhiteSpace(_newTeamName) || _teamBusy)">
+                                Create &amp; become captain
+                            </button>
+                        </div>
+                    </div>
+
+                    @* Join with code *@
+                    <div>
+                        <label class="form-label small fw-semibold">Join with invite code</label>
+                        <div class="input-group">
+                            <input class="form-control" @bind="_joinCode" maxlength="50"
+                                   placeholder="Paste invite code" />
+                            <button class="btn btn-outline-primary"
+                                    @onclick="JoinWithCode"
+                                    disabled="@(string.IsNullOrWhiteSpace(_joinCode) || _teamBusy)">
+                                Join
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (_sessionEmail is null && _tournament.RegistrationOpen)
+        {
+            <p class="text-muted mb-4">
+                <a href="/login?returnUrl=/t/@Slug">Sign in</a> to create or join a team.
+            </p>
+        }
+    }
+
+    @* ── Individual registration (non-team events only) ──────────────────────────── *@
+    @if (!_tournament.IsTeamEvent && _tournament.RegistrationOpen && _tournament.Status == TournamentStatus.Upcoming && !_myRegistrationSuccess)
     {
         <div class="card mb-4" style="max-width:500px">
             <div class="card-body">
@@ -515,6 +705,22 @@ else
     private List<Organization> _userOrgs = [];
     private Guid? _selectedOrgId;
     private bool _loading = true;
+    // Team state
+    private List<Team> _teams = [];
+    private Team? _myTeam;
+    private bool _isCaptain;
+    private string _newTeamName = string.Empty;
+    private string _joinCode = string.Empty;
+    private string? _addName;
+    private string? _addEmail;
+    private bool _teamBusy;
+    private string? _teamError;
+    private string? _teamSuccess;
+    private Guid? _confirmRemovePlayer;
+    private Guid? _editingMember;
+    private string? _editMemberFaction;
+    private string? _editMemberArmyList;
+    private bool _inviteCopied;
     private bool _checkInBusy;
     private bool _sportsRatingBusy;
     private Dictionary<Guid, int> _pendingSportsRating = [];
@@ -597,6 +803,17 @@ else
                 .ToList();
         }
 
+        // Load teams for team events
+        if (_tournament.IsTeamEvent)
+        {
+            _teams = [.. await TeamService.ListByTournamentAsync(_tournament.Id)];
+            if (_myPlayerId.HasValue)
+            {
+                _myTeam = _teams.FirstOrDefault(t => t.Players.Any(p => p.Id == _myPlayerId));
+                _isCaptain = _myTeam?.CaptainPlayerId == _myPlayerId;
+            }
+        }
+
         var ratingList = await EloService.GetLeaderboardAsync();
         _playerRatings = ratingList.ToDictionary(r => r.Email, StringComparer.OrdinalIgnoreCase);
 
@@ -658,6 +875,170 @@ else
     }
 
     // ── Check-in ──────────────────────────────────────────────────────────────
+    // ── Team handlers ─────────────────────────────────────────────────────────
+
+    private async Task RefreshTeams()
+    {
+        if (_tournament is null) return;
+        _teams = [.. await TeamService.ListByTournamentAsync(_tournament.Id)];
+        if (_myPlayerId.HasValue)
+        {
+            _myTeam = _teams.FirstOrDefault(t => t.Players.Any(p => p.Id == _myPlayerId));
+            _isCaptain = _myTeam?.CaptainPlayerId == _myPlayerId;
+        }
+    }
+
+    private async Task CreateTeam()
+    {
+        if (_tournament is null || _sessionEmail is null || string.IsNullOrWhiteSpace(_newTeamName)) return;
+        _teamBusy = true; _teamError = null;
+        try
+        {
+            // Register player first if not already
+            var myPlayer = _players.FirstOrDefault(p =>
+                string.Equals(p.Email, _sessionEmail, StringComparison.OrdinalIgnoreCase));
+            if (myPlayer is null)
+            {
+                myPlayer = await PlayerService.RegisterAsync(new Services.Players.RegisterPlayerRequest(
+                    TournamentId: _tournament.Id, Name: _sessionEmail.Split('@')[0],
+                    Email: _sessionEmail, ArmyFaction: null, ArmyList: null));
+                _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
+                _myPlayerId = myPlayer.Id;
+                _alreadyRegistered = true;
+            }
+            await TeamService.CreateTeamAsync(_tournament.Id, _newTeamName, myPlayer.Id);
+            _newTeamName = string.Empty;
+            await RefreshTeams();
+            _teamSuccess = "Team created! Share the invite link with your teammates.";
+        }
+        catch (Exception ex) { _teamError = ex.Message; }
+        finally { _teamBusy = false; }
+    }
+
+    private async Task JoinWithCode()
+    {
+        if (_tournament is null || _sessionEmail is null || string.IsNullOrWhiteSpace(_joinCode)) return;
+        _teamBusy = true; _teamError = null;
+        try
+        {
+            var team = await TeamService.GetByInviteTokenAsync(_joinCode.Trim());
+            if (team is null || team.TournamentId != _tournament.Id)
+                throw new InvalidOperationException("Invalid invite code.");
+
+            var myPlayer = _players.FirstOrDefault(p =>
+                string.Equals(p.Email, _sessionEmail, StringComparison.OrdinalIgnoreCase));
+            if (myPlayer is null)
+            {
+                myPlayer = await PlayerService.RegisterAsync(new Services.Players.RegisterPlayerRequest(
+                    TournamentId: _tournament.Id, Name: _sessionEmail.Split('@')[0],
+                    Email: _sessionEmail, ArmyFaction: null, ArmyList: null));
+                _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
+                _myPlayerId = myPlayer.Id;
+            }
+            await TeamService.JoinTeamAsync(team.Id, myPlayer.Id);
+            _joinCode = string.Empty;
+            await RefreshTeams();
+        }
+        catch (Exception ex) { _teamError = ex.Message; }
+        finally { _teamBusy = false; }
+    }
+
+    private async Task AddPlayerManually()
+    {
+        if (_myTeam is null || string.IsNullOrWhiteSpace(_addName)) return;
+        _teamBusy = true; _teamError = null;
+        try
+        {
+            await TeamService.AddPlayerManuallyAsync(_myTeam.Id, _addName!, _addEmail);
+            _addName = _addEmail = null;
+            _players = [.. await PlayerService.ListByTournamentAsync(_tournament!.Id)];
+            await RefreshTeams();
+            _teamSuccess = "Player added.";
+        }
+        catch (Exception ex) { _teamError = ex.Message; }
+        finally { _teamBusy = false; }
+    }
+
+    private async Task RemoveTeamPlayer(Guid playerId)
+    {
+        _confirmRemovePlayer = null; _teamBusy = true; _teamError = null;
+        try
+        {
+            await TeamService.RemoveFromTeamAsync(playerId);
+            _players = [.. await PlayerService.ListByTournamentAsync(_tournament!.Id)];
+            await RefreshTeams();
+        }
+        catch (Exception ex) { _teamError = ex.Message; }
+        finally { _teamBusy = false; }
+    }
+
+    private async Task TransferCaptain(Guid newCaptainId)
+    {
+        if (_myTeam is null) return;
+        _teamBusy = true; _teamError = null;
+        try
+        {
+            await TeamService.TransferCaptainAsync(_myTeam.Id, newCaptainId);
+            await RefreshTeams();
+            _isCaptain = _myTeam?.CaptainPlayerId == _myPlayerId;
+            _teamSuccess = "Captain transferred.";
+        }
+        catch (Exception ex) { _teamError = ex.Message; }
+        finally { _teamBusy = false; }
+    }
+
+    private async Task SaveMemberEdit(Guid playerId)
+    {
+        _teamBusy = true; _teamError = null;
+        try
+        {
+            await TeamService.UpdateTeamMemberAsync(playerId, _editMemberFaction, _editMemberArmyList);
+            _editingMember = null;
+            _players = [.. await PlayerService.ListByTournamentAsync(_tournament!.Id)];
+            await RefreshTeams();
+        }
+        catch (Exception ex) { _teamError = ex.Message; }
+        finally { _teamBusy = false; }
+    }
+
+    private async Task CopyInviteLink()
+    {
+        if (_myTeam is null) return;
+        var url = $"{Nav.BaseUri.TrimEnd('/')}/t/{Slug}/join-team?code={_myTeam.InviteToken}";
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+        _inviteCopied = true;
+        StateHasChanged();
+    }
+
+    private async Task InviteOrgMember(string? email)
+    {
+        if (_myTeam is null || string.IsNullOrWhiteSpace(email)) return;
+        _teamBusy = true; _teamError = null;
+        try
+        {
+            var displayName = _playerRatings.TryGetValue(email, out var r) ? r.DisplayName : email.Split('@')[0];
+            await TeamService.AddPlayerManuallyAsync(_myTeam.Id, displayName, email);
+            _players = [.. await PlayerService.ListByTournamentAsync(_tournament!.Id)];
+            await RefreshTeams();
+            _teamSuccess = $"{displayName} added to the team.";
+        }
+        catch (Exception ex) { _teamError = ex.Message; }
+        finally { _teamBusy = false; }
+    }
+
+    // Org members not already on this team or in this tournament
+    private List<PlayerRating> OrgMembersNotOnTeam(Organization org)
+    {
+        var registeredEmails = _players.Select(p => p.Email?.ToLowerInvariant()).ToHashSet();
+        return org.Members
+            .Where(m => !string.Equals(m.User.Email, _sessionEmail, StringComparison.OrdinalIgnoreCase))
+            .Select(m => _playerRatings.TryGetValue(m.User.Email, out var r) ? r : new PlayerRating { Email = m.User.Email, DisplayName = m.User.Email })
+            .Where(r => !registeredEmails.Contains(r.Email.ToLowerInvariant()))
+            .ToList();
+    }
+
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
     private async Task CheckIn()
     {
         if (_myPlayerId is null) return;

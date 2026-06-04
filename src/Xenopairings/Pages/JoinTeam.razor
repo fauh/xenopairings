@@ -1,0 +1,132 @@
+@page "/t/{Slug}/join-team"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Xenopairings.Models
+@using Xenopairings.Services.Tournaments
+@using Xenopairings.Services.Players
+@using Xenopairings.Services.Teams
+@inject ITournamentService TournamentService
+@inject IPlayerService PlayerService
+@inject ITeamService TeamService
+@inject NavigationManager Nav
+
+<PageTitle>Join team — Xenopairings</PageTitle>
+
+@if (_loading)
+{
+    <LoadingSpinner />
+}
+else if (_error is not null)
+{
+    <div class="empty-state">
+        <div class="empty-state-icon">🎲</div>
+        <h3>@_error</h3>
+        <a href="/t/@Slug" class="btn btn-outline-secondary mt-2">Back to tournament</a>
+    </div>
+}
+else if (!_loggedIn)
+{
+    <div class="empty-state">
+        <div class="empty-state-icon">🔒</div>
+        <h3>Sign in to join</h3>
+        <p>You need an account to join a team.</p>
+        <a href="/login?returnUrl=/t/@Slug/join-team?code=@_code" class="btn btn-primary mt-2">Sign in</a>
+    </div>
+}
+else if (_joined)
+{
+    <div class="text-center" style="padding:4rem 1rem">
+        <div style="font-size:3rem">🎉</div>
+        <h1>You're on the team!</h1>
+        <p class="text-muted">You joined <strong>@_team?.Name</strong>.</p>
+        <a href="/t/@Slug" class="btn btn-primary mt-2">Go to tournament →</a>
+    </div>
+}
+else if (_team is not null)
+{
+    <div style="max-width:480px;margin:4rem auto;padding:0 1rem">
+        <h1>Join team</h1>
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">@_team.Name</h5>
+                <p class="text-muted small">
+                    @_team.Players.Count(p => !p.IsDropped) member@(_team.Players.Count(p => !p.IsDropped) == 1 ? "" : "s")
+                    @if (_tournament?.TeamSize.HasValue == true)
+                    {
+                        <span> / @_tournament.TeamSize</span>
+                    }
+                </p>
+                @if (!string.IsNullOrEmpty(_joinError))
+                {
+                    <div class="alert alert-danger py-2 small">@_joinError</div>
+                }
+                <button class="btn btn-primary" @onclick="Join" disabled="@_busy">
+                    @(_busy ? "Joining…" : "Join this team")
+                </button>
+                <a href="/t/@Slug" class="btn btn-outline-secondary ms-2">Cancel</a>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = string.Empty;
+    [SupplyParameterFromQuery(Name = "code")] public string? Code { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private Tournament? _tournament;
+    private Team? _team;
+    private string? _code;
+    private bool _loading = true;
+    private bool _loggedIn;
+    private bool _joined;
+    private bool _busy;
+    private string? _error;
+    private string? _joinError;
+    private string? _sessionEmail;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _code = Code;
+        var authState = await AuthStateTask;
+        _loggedIn = authState.User.Identity?.IsAuthenticated == true;
+        _sessionEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+
+        if (string.IsNullOrWhiteSpace(_code)) { _error = "Invalid invite link."; _loading = false; return; }
+
+        _tournament = await TournamentService.GetBySlugAsync(Slug);
+        if (_tournament is null) { _error = "Tournament not found."; _loading = false; return; }
+
+        _team = await TeamService.GetByInviteTokenAsync(_code);
+        if (_team is null || _team.TournamentId != _tournament.Id)
+        { _error = "This invite link is invalid or expired."; _loading = false; return; }
+
+        _loading = false;
+    }
+
+    private async Task Join()
+    {
+        if (_team is null || _tournament is null || _sessionEmail is null) return;
+        _busy = true;
+        _joinError = null;
+        try
+        {
+            // Register the player (creates Player record)
+            var player = await PlayerService.RegisterAsync(new Services.Players.RegisterPlayerRequest(
+                TournamentId: _tournament.Id,
+                Name: _sessionEmail.Split('@')[0],
+                Email: _sessionEmail,
+                ArmyFaction: null,
+                ArmyList: null));
+
+            // Join the team
+            await TeamService.JoinTeamAsync(_team.Id, player.Id);
+            _joined = true;
+        }
+        catch (Exception ex)
+        {
+            _joinError = ex.Message;
+        }
+        finally { _busy = false; }
+    }
+}

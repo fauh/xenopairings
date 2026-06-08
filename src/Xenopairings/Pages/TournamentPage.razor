@@ -22,9 +22,21 @@
 @inject IOrganizationService OrgService
 @inject IPlayerReportService PlayerReportService
 @inject ITeamService TeamService
+@inject Xenopairings.Services.Notifications.TournamentNotificationService TournamentNotifications
 @inject NavigationManager Nav
+@implements IAsyncDisposable
 
 <PageTitle>@(_tournament?.Title ?? "Tournament") — Xenopairings</PageTitle>
+
+@* ── New round toast ── *@
+@if (_newRoundToast is not null)
+{
+    <div class="round-toast" role="alert" aria-live="polite">
+        <span>🎲 Round @_newRoundToast has started!</span>
+        <a href="/t/@Slug/round/@_newRoundToast" class="round-toast-link">View pairings →</a>
+        <button class="round-toast-close" @onclick="() => _newRoundToast = null" aria-label="Dismiss">✕</button>
+    </div>
+}
 
 @if (_loading)
 {
@@ -721,6 +733,7 @@ else
     private List<Organization> _userOrgs = [];
     private Guid? _selectedOrgId;
     private bool _loading = true;
+    private int? _newRoundToast;   // round number shown in the notification toast, null = hidden
     // Team state
     private List<Team> _teams = [];
     private Team? _myTeam;
@@ -854,6 +867,31 @@ else
         }
 
         _loading = false;
+
+        // Subscribe to new-round notifications AFTER initial data is loaded.
+        TournamentNotifications.RoundStarted += OnRoundStarted;
+    }
+
+    private async Task OnRoundStarted(Guid tournamentId, int roundNumber)
+    {
+        // Only react to notifications for this specific tournament.
+        if (_tournament is null || _tournament.Id != tournamentId) return;
+
+        // Refresh must run on the Blazor renderer thread.
+        await InvokeAsync(async () =>
+        {
+            await RefreshRoundsAsync();
+            _standings = [.. await StandingsService.ComputeAsync(
+                _tournament.Id, _tournament.ScoringSystem, _tournament.Tiebreakers)];
+            _newRoundToast = roundNumber;
+            StateHasChanged();
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        TournamentNotifications.RoundStarted -= OnRoundStarted;
+        await Task.CompletedTask;
     }
 
     /// Returns (displayScore, cssClass) for a player's match in the standings grid.

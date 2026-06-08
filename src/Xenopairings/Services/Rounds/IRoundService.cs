@@ -25,6 +25,12 @@ public interface IRoundService
     Task SetSportsRatingAsync(Guid matchId, Guid submittingPlayerId, int rating);
 
     /// <summary>
+    /// Saves per-game-turn breakdowns for both players. Informational only —
+    /// does not recompute Player1Score / Player2Score totals.
+    /// </summary>
+    Task SetTurnScoresAsync(Guid matchId, IReadOnlyList<TurnScore> p1Turns, IReadOnlyList<TurnScore> p2Turns);
+
+    /// <summary>
     /// Records scores using the standard breakdown (Primary + Secondary + Battle Ready).
     /// Computes and stores the totals in Player1Score / Player2Score for use by standings and ELO.
     /// Also stores the individual breakdown fields.

@@ -37,4 +37,12 @@ public class Match
     public int? Player2PrimaryScore { get; set; }
     public int? Player2SecondaryScore { get; set; }
     public bool Player2BattleReady { get; set; } = true;
+
+    /// <summary>
+    /// Optional per-game-turn breakdown for Player 1.
+    /// JSON array of <see cref="TurnScore"/>. Null when not recorded.
+    /// Does not affect the computed Player1Score total.
+    /// </summary>
+    public string? Player1TurnScoresJson { get; set; }
+    public string? Player2TurnScoresJson { get; set; }
 }

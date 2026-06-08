@@ -81,6 +81,72 @@
         </div>
     </div>
 
+    @* ── Extended scoring — per-turn breakdown ── *@
+    <details class="mt-3">
+        <summary class="small text-muted" style="cursor:pointer">Extended scoring (per turn)</summary>
+        <div class="mt-2">
+            <div class="table-responsive">
+                <table class="table table-sm table-borderless mb-0" style="max-width:420px">
+                    <thead>
+                        <tr>
+                            <th class="text-muted small fw-normal" style="width:3rem">Turn</th>
+                            <th class="small text-center" colspan="2">@Player1Label</th>
+                            <th class="small text-center" colspan="2">@Player2Label</th>
+                        </tr>
+                        <tr>
+                            <th></th>
+                            <th class="small text-muted fw-normal text-center">Pri</th>
+                            <th class="small text-muted fw-normal text-center">Sec</th>
+                            <th class="small text-muted fw-normal text-center">Pri</th>
+                            <th class="small text-muted fw-normal text-center">Sec</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var t = 0; t < _p1Turns.Count; t++)
+                        {
+                            var idx = t;
+                            <tr>
+                                <td class="text-muted small">T@(_p1Turns[idx].Turn)</td>
+                                <td>
+                                    <input type="number" class="form-control form-control-sm text-center" min="0" max="15"
+                                           value="@_p1Turns[idx].Primary"
+                                           @oninput="e => UpdateTurn(true, idx, true, e.Value?.ToString())"
+                                           disabled="@Disabled" style="width:52px" />
+                                </td>
+                                <td>
+                                    <input type="number" class="form-control form-control-sm text-center" min="0" max="15"
+                                           value="@_p1Turns[idx].Secondary"
+                                           @oninput="e => UpdateTurn(true, idx, false, e.Value?.ToString())"
+                                           disabled="@Disabled" style="width:52px" />
+                                </td>
+                                <td>
+                                    <input type="number" class="form-control form-control-sm text-center" min="0" max="15"
+                                           value="@_p2Turns[idx].Primary"
+                                           @oninput="e => UpdateTurn(false, idx, true, e.Value?.ToString())"
+                                           disabled="@Disabled" style="width:52px" />
+                                </td>
+                                <td>
+                                    <input type="number" class="form-control form-control-sm text-center" min="0" max="15"
+                                           value="@_p2Turns[idx].Secondary"
+                                           @oninput="e => UpdateTurn(false, idx, false, e.Value?.ToString())"
+                                           disabled="@Disabled" style="width:52px" />
+                                </td>
+                            </tr>
+                        }
+                        @* Totals row *@
+                        <tr class="fw-semibold">
+                            <td class="text-muted small">Total</td>
+                            <td class="text-center small">@TurnSum(_p1Turns, true)</td>
+                            <td class="text-center small">@TurnSum(_p1Turns, false)</td>
+                            <td class="text-center small">@TurnSum(_p2Turns, true)</td>
+                            <td class="text-center small">@TurnSum(_p2Turns, false)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </details>
+
     @* ── WTC GP preview ── *@
     @if (ScoringSystem == ScoringSystem.Wtc && P1Primary.HasValue && P1Secondary.HasValue && P2Primary.HasValue && P2Secondary.HasValue)
     {
@@ -115,8 +181,45 @@
     [Parameter] public EventCallback<int?>  P2SecondaryChanged   { get; set; }
     [Parameter] public EventCallback<bool>  P2BattleReadyChanged { get; set; }
 
+    // Turn scores — passed back to parent so it can save them
+    [Parameter] public IReadOnlyList<TurnScore>? P1TurnScores { get; set; }
+    [Parameter] public IReadOnlyList<TurnScore>? P2TurnScores { get; set; }
+    [Parameter] public EventCallback<IReadOnlyList<TurnScore>> P1TurnScoresChanged { get; set; }
+    [Parameter] public EventCallback<IReadOnlyList<TurnScore>> P2TurnScoresChanged { get; set; }
+
     // Unique id suffix so checkbox ids don't collide when multiple forms are on the same page
     private readonly string _id = Guid.NewGuid().ToString("N")[..8];
+
+    // Internal mutable lists — initialised from parameters
+    private List<TurnScore> _p1Turns = ScoreCalculator.DefaultTurns();
+    private List<TurnScore> _p2Turns = ScoreCalculator.DefaultTurns();
+
+    protected override void OnParametersSet()
+    {
+        if (P1TurnScores is not null && P1TurnScores.Count > 0)
+            _p1Turns = P1TurnScores.ToList();
+        if (P2TurnScores is not null && P2TurnScores.Count > 0)
+            _p2Turns = P2TurnScores.ToList();
+    }
+
+    private void UpdateTurn(bool isP1, int idx, bool isPrimary, string? raw)
+    {
+        var list = isP1 ? _p1Turns : _p2Turns;
+        if (idx < 0 || idx >= list.Count) return;
+        var val = int.TryParse(raw, out var n) ? (int?)n : null;
+        var old = list[idx];
+        list[idx] = isPrimary
+            ? new TurnScore(old.Turn, val, old.Secondary)
+            : new TurnScore(old.Turn, old.Primary, val);
+
+        var cb = isP1 ? P1TurnScoresChanged : P2TurnScoresChanged;
+        _ = cb.InvokeAsync(list);
+    }
+
+    private static int? TurnSum(List<TurnScore> turns, bool isPrimary) =>
+        turns.Any(t => isPrimary ? t.Primary.HasValue : t.Secondary.HasValue)
+            ? turns.Sum(t => isPrimary ? (t.Primary ?? 0) : (t.Secondary ?? 0))
+            : null;
 
     private static int? TryParseNullable(string? s) =>
         int.TryParse(s, out var n) ? n : null;

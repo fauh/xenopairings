@@ -88,7 +88,9 @@ else
                     P1BattleReady="@_myP1BattleReady" P1BattleReadyChanged="v => _myP1BattleReady = v"
                     P2Primary="@_myP2Primary" P2PrimaryChanged="v => _myP2Primary = v"
                     P2Secondary="@_myP2Secondary" P2SecondaryChanged="v => _myP2Secondary = v"
-                    P2BattleReady="@_myP2BattleReady" P2BattleReadyChanged="v => _myP2BattleReady = v" />
+                    P2BattleReady="@_myP2BattleReady" P2BattleReadyChanged="v => _myP2BattleReady = v"
+                    P1TurnScores="@_myP1Turns" P1TurnScoresChanged="v => _myP1Turns = v"
+                    P2TurnScores="@_myP2Turns" P2TurnScoresChanged="v => _myP2Turns = v" />
 
                 <div class="row g-3 mt-2 mb-3">
                     <div class="col-sm-6">
@@ -246,6 +248,8 @@ else
     private int?  _myP2Primary    = null;
     private int?  _myP2Secondary  = null;
     private bool  _myP2BattleReady = true;
+    private IReadOnlyList<TurnScore> _myP1Turns = ScoreCalculator.DefaultTurns();
+    private IReadOnlyList<TurnScore> _myP2Turns = ScoreCalculator.DefaultTurns();
     private bool? _iWentFirst;
     private bool? _iWasAttacker;
     private bool _busy;
@@ -272,6 +276,8 @@ else
         // Reset submission state when switching rounds
         _myP1Primary = _myP1Secondary = _myP2Primary = _myP2Secondary = null;
         _myP1BattleReady = _myP2BattleReady = true;
+        _myP1Turns = ScoreCalculator.DefaultTurns();
+        _myP2Turns = ScoreCalculator.DefaultTurns();
         _iWentFirst = _iWasAttacker = null;
         _submitError = null;
         _submitSuccess = false;
@@ -351,6 +357,14 @@ else
                 p2Pri, p2Sec, p2Br,
                 player1IsAttacker: p1IsAttacker,
                 player1WentFirst:  p1WentFirst);
+
+            // Save turn scores if any were entered (fire-and-forget ok — informational only)
+            if (_myP1Turns.Any(t => t.Primary.HasValue || t.Secondary.HasValue) ||
+                _myP2Turns.Any(t => t.Primary.HasValue || t.Secondary.HasValue))
+            {
+                await RoundService.SetTurnScoresAsync(_myMatch.Id, _myP1Turns, _myP2Turns);
+            }
+
             _matches = [.. await RoundService.GetMatchesAsync(_round!.Id)];
             _myMatch = _matches.FirstOrDefault(m =>
                 m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId);

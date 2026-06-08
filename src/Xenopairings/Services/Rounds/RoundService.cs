@@ -560,6 +560,18 @@ public sealed class RoundService(
         // ELO is processed at tournament-end only.
     }
 
+    public async Task SetTurnScoresAsync(
+        Guid matchId,
+        IReadOnlyList<TurnScore> p1Turns,
+        IReadOnlyList<TurnScore> p2Turns)
+    {
+        var match = await db.Matches.FindAsync(matchId)
+            ?? throw new InvalidOperationException("Match not found.");
+        match.Player1TurnScoresJson = ScoreCalculator.SerializeTurnScores(p1Turns);
+        match.Player2TurnScoresJson = ScoreCalculator.SerializeTurnScores(p2Turns);
+        await db.SaveChangesAsync();
+    }
+
     public async Task SetSportsRatingAsync(Guid matchId, Guid submittingPlayerId, int rating)
     {
         if (rating < 1 || rating > 5)

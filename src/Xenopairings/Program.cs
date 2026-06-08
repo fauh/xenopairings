@@ -124,10 +124,26 @@ builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection(Email
 var emailSettings = builder.Configuration.GetSection(EmailSettings.SectionName).Get<EmailSettings>()
     ?? new EmailSettings();
 
-if (emailSettings.UseRealProvider)
-    builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>();
-else
-    builder.Services.AddScoped<IEmailSender, ConsoleEmailSender>();
+// Provider selection: "smtp" → MailKit SMTP, "resend" → Resend HTTP API, else console.
+// Set EmailSettings__Provider in Railway to activate real sending.
+switch (emailSettings.Provider.ToLowerInvariant())
+{
+    case "smtp":
+        if (string.IsNullOrWhiteSpace(emailSettings.SmtpHost))
+            throw new InvalidOperationException(
+                "EmailSettings:SmtpHost must be set when EmailSettings:Provider is 'smtp'.");
+        builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+        break;
+    case "resend":
+        if (string.IsNullOrWhiteSpace(emailSettings.ApiKey))
+            throw new InvalidOperationException(
+                "EmailSettings:ApiKey must be set when EmailSettings:Provider is 'resend'.");
+        builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>();
+        break;
+    default:
+        builder.Services.AddScoped<IEmailSender, ConsoleEmailSender>();
+        break;
+}
 
 // ── App services ──────────────────────────────────────────────────────────────
 builder.Services.AddSingleton<TokenGenerator>();

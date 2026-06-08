@@ -12,6 +12,7 @@
 @inject IRoundService RoundService
 @inject IPlayerReportService PlayerReportService
 @inject ITopCutService TopCutService
+@inject Xenopairings.Services.Notifications.TournamentNotificationService TournamentNotifications
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -980,6 +981,7 @@ else
             _newMissionLayout = null;
             await LoadAllAsync();
             _statusMessage = $"Round {_rounds.Count} created with pairings.";
+            await TournamentNotifications.NotifyRoundStartedAsync(_tournament.Id, _rounds.Count);
         }
         catch (Exception ex)
         {

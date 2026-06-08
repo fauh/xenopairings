@@ -656,17 +656,17 @@ else
                     @foreach (var player in _players.OrderBy(p => p.Name))
                     {
                         <tr>
-                            <td>@PlayerNameCell(player)</td>
-                            <td class="d-none d-sm-table-cell">@(player.ArmyFaction ?? "—")</td>
-                            <td>@(player.IsDropped ? "Dropped" : "Active")</td>
                             <td>
+                                @PlayerNameCell(player)
                                 @if (_myPlayerId.HasValue && player.Id != _myPlayerId)
                                 {
-                                    <button class="btn btn-sm btn-link text-danger p-0"
+                                    <button class="btn btn-link p-0 ms-1 report-flag"
                                             title="Report player"
                                             @onclick="() => StartReport(player.Id)">🚩</button>
                                 }
                             </td>
+                            <td class="d-none d-sm-table-cell">@(player.ArmyFaction ?? "—")</td>
+                            <td>@(player.IsDropped ? "Dropped" : "Active")</td>
                         </tr>
                     }
                 </tbody>

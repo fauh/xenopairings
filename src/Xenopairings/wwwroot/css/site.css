@@ -220,6 +220,17 @@ a:hover, .btn-link:hover {
     color: var(--color-gold-light) !important;
 }
 
+/* ── Report flag button ── */
+.report-flag {
+    font-size: 0.65rem;
+    opacity: 0.25;
+    vertical-align: middle;
+    color: inherit !important;
+    text-decoration: none !important;
+    transition: opacity 0.15s;
+}
+.report-flag:hover { opacity: 0.9; }
+
 /* ── Form control: readonly inputs ── */
 /* Bootstrap applies a slightly different bg to readonly inputs that doesn't
    inherit our dark surface colour properly in dark mode. */

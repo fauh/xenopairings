@@ -183,6 +183,14 @@ public class TournamentService(
         t.RegistrationOpen = false;
         await db.SaveChangesAsync();
 
+        // Test events are excluded from ELO — they exist purely for practice/setup.
+        if (t.IsTestEvent)
+        {
+            logger.LogInformation(
+                "Skipping ELO processing for test event {TournamentId}.", tournamentId);
+            return;
+        }
+
         // Process ELO for all scored matches in the tournament (snapshot model).
         // Best-effort — don't fail the end-tournament action if ELO calculation errors.
         try { await eloService.ProcessTournamentAsync(tournamentId); }

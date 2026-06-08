@@ -342,6 +342,25 @@ a:hover, .btn-link:hover {
 }
 .site-footer-links a:hover { opacity: 1; text-decoration: underline; }
 
+/* ── Touch targets ── */
+/* WCAG 2.5.5: interactive elements should be at least 44×44 CSS px.
+   Bootstrap's .btn-sm is 31px tall by default — boost it on touch devices. */
+@media (hover: none) and (pointer: coarse) {
+    .btn-sm { min-height: 2.5rem; padding-top: 0.4rem; padding-bottom: 0.4rem; }
+    .form-control-sm, .form-select-sm { min-height: 2.5rem; font-size: 1rem; }
+    input[type="number"].form-control-sm { min-height: 2.5rem; }
+}
+
+/* ── Score inputs ── */
+/* Fixed pixel widths on score inputs are too narrow on mobile.
+   Replace with flexible min/max sizing. */
+.score-input {
+    min-width: 56px;
+    max-width: 80px;
+    width: 100%;
+    text-align: center;
+}
+
 /* ── Mobile nav ── */
 .nav-toggle {
     display: none;
@@ -390,7 +409,18 @@ a:hover, .btn-link:hover {
 }
 
 /* ── Responsive ── */
+/* ── General responsive ── */
 @media (max-width: 576px) {
     .page-content { padding: 1rem 0.75rem; }
     .site-footer .container { flex-direction: column; align-items: flex-start; }
+
+    /* Standings per-round columns: hide round columns beyond the first two on very small screens */
+    .standings-round-col:nth-child(n+8) { display: none; }
+
+    /* Give cards full-width breathing room */
+    .card { border-radius: 0.5rem; }
+
+    /* Stack horizontal button groups vertically */
+    .btn-group-mobile-stack { flex-direction: column !important; gap: 0.5rem; }
+    .btn-group-mobile-stack .btn { width: 100%; }
 }

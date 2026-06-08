@@ -473,7 +473,14 @@ else
                 <div class="table-responsive mb-3">
                     <table class="table table-sm">
                         <thead>
-                            <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th>First</th><th>Attacker</th><th>Result</th></tr>
+                            <tr>
+                                <th class="d-none d-sm-table-cell">#</th>
+                                <th>Player 1</th>
+                                <th>Player 2</th>
+                                <th class="d-none d-md-table-cell">First</th>
+                                <th class="d-none d-md-table-cell">Attacker</th>
+                                <th>Result</th>
+                            </tr>
                         </thead>
                         <tbody>
                             @foreach (var match in (myMatch is not null
@@ -482,18 +489,18 @@ else
                             {
                                 var isMyRow = match.Id == myMatch?.Id;
                                 <tr class="@(isMyRow ? "table-primary fw-semibold" : "")">
-                                    <td>
+                                    <td class="d-none d-sm-table-cell">
                                         @match.TableNumber
                                         @if (isMyRow) { <span class="badge text-bg-primary ms-1 fw-normal small">you</span> }
                                     </td>
                                     <td>@PlayerNameCell(match.Player1)</td>
                                     <td>@if (match.Player2Id is null) {<span class="text-muted">— (bye)</span>} else {@PlayerNameCell(match.Player2)}</td>
-                                    <td class="text-muted small fw-normal">
+                                    <td class="text-muted small fw-normal d-none d-md-table-cell">
                                         <span>@(match.Player1WentFirst == true  ? match.Player1?.Name ?? "P1"
                                                : match.Player1WentFirst == false ? match.Player2?.Name ?? "P2"
                                                : "—")</span>
                                     </td>
-                                    <td class="text-muted small fw-normal">
+                                    <td class="text-muted small fw-normal d-none d-md-table-cell">
                                         <span>@(match.Player1IsAttacker == true  ? match.Player1?.Name ?? "P1"
                                                : match.Player1IsAttacker == false ? match.Player2?.Name ?? "P2"
                                                : "—")</span>
@@ -590,12 +597,12 @@ else
                     <tr>
                         <th>#</th>
                         <th>Player</th>
-                        <th>Faction</th>
+                        <th class="d-none d-sm-table-cell">Faction</th>
                         <th>W</th>
                         <th>Pts</th>
                         @foreach (var (r, _) in orderedRounds)
                         {
-                            <th class="text-center small">R@(r.RoundNumber)</th>
+                            <th class="text-center small standings-round-col">R@(r.RoundNumber)</th>
                         }
                     </tr>
                 </thead>
@@ -607,7 +614,7 @@ else
                         <tr>
                             <td>@pos</td>
                             <td>@PlayerNameCell(player)</td>
-                            <td>@(player?.ArmyFaction ?? "—")</td>
+                            <td class="d-none d-sm-table-cell">@(player?.ArmyFaction ?? "—")</td>
                             <td>@standing.Wins</td>
                             <td>@standing.TotalPoints</td>
                             @foreach (var (_, matches) in orderedRounds)
@@ -616,12 +623,12 @@ else
                                     x.Player1Id == standing.PlayerId || x.Player2Id == standing.PlayerId);
                                 @if (m is null || !m.IsScored)
                                 {
-                                    <td class="text-center text-muted small">—</td>
+                                    <td class="text-center text-muted small standings-round-col">—</td>
                                 }
                                 else
                                 {
                                     var (ds, dc) = RoundScore(m, standing.PlayerId);
-                                    <td class="text-center small fw-semibold @dc">@ds</td>
+                                    <td class="text-center small fw-semibold standings-round-col @dc">@ds</td>
                                 }
                             }
                         </tr>
@@ -643,14 +650,14 @@ else
         <div class="table-responsive mb-4">
             <table class="table table-sm">
                 <thead>
-                    <tr><th>Name</th><th>Faction</th><th>Status</th></tr>
+                    <tr><th>Name</th><th class="d-none d-sm-table-cell">Faction</th><th>Status</th></tr>
                 </thead>
                 <tbody>
                     @foreach (var player in _players.OrderBy(p => p.Name))
                     {
                         <tr>
                             <td>@PlayerNameCell(player)</td>
-                            <td>@(player.ArmyFaction ?? "—")</td>
+                            <td class="d-none d-sm-table-cell">@(player.ArmyFaction ?? "—")</td>
                             <td>@(player.IsDropped ? "Dropped" : "Active")</td>
                             <td>
                                 @if (_myPlayerId.HasValue && player.Id != _myPlayerId)

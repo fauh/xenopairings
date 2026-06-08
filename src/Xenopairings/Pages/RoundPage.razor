@@ -162,11 +162,11 @@ else
             <table class="table table-sm">
                 <thead>
                     <tr>
-                        <th>Table</th>
+                        <th class="d-none d-sm-table-cell">#</th>
                         <th>Player 1</th>
                         <th>Player 2</th>
-                        <th>First turn</th>
-                        <th>Attacker</th>
+                        <th class="d-none d-md-table-cell">First turn</th>
+                        <th class="d-none d-md-table-cell">Attacker</th>
                         <th>Result</th>
                     </tr>
                 </thead>
@@ -175,7 +175,7 @@ else
                     {
                         var isMyRow = match.Id == _myMatch?.Id;
                         <tr class="@(isMyRow ? "table-primary fw-semibold" : "")">
-                            <td>
+                            <td class="d-none d-sm-table-cell">
                                 @match.TableNumber
                                 @if (isMyRow) { <span class="badge text-bg-primary ms-1 fw-normal small">you</span> }
                             </td>
@@ -190,12 +190,12 @@ else
                                     @PlayerLink(match.Player2)
                                 }
                             </td>
-                            <td class="text-muted small fw-normal">
+                            <td class="text-muted small fw-normal d-none d-md-table-cell">
                                 <span>@(match.Player1WentFirst == true  ? match.Player1?.Name ?? "P1"
                                        : match.Player1WentFirst == false ? match.Player2?.Name ?? "P2"
                                        : "—")</span>
                             </td>
-                            <td class="text-muted small fw-normal">
+                            <td class="text-muted small fw-normal d-none d-md-table-cell">
                                 <span>@(match.Player1IsAttacker == true  ? match.Player1?.Name ?? "P1"
                                        : match.Player1IsAttacker == false ? match.Player2?.Name ?? "P2"
                                        : "—")</span>

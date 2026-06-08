@@ -262,10 +262,10 @@ else
                                                 {
                                                     var tc = GetTopCutInput(m.Id);
                                                     <div class="d-flex gap-1 align-items-center">
-                                                        <input type="number" class="form-control form-control-sm" style="width:60px" min="0" placeholder="P1"
+                                                        <input type="number" class="form-control form-control-sm score-input" min="0" placeholder="P1"
                                                                value="@tc.p1" @oninput="e => SetTopCutScore(m.Id, true, e.Value?.ToString())" />
                                                         <span>—</span>
-                                                        <input type="number" class="form-control form-control-sm" style="width:60px" min="0" placeholder="P2"
+                                                        <input type="number" class="form-control form-control-sm score-input" min="0" placeholder="P2"
                                                                value="@tc.p2" @oninput="e => SetTopCutScore(m.Id, false, e.Value?.ToString())" />
                                                     </div>
                                                 }
@@ -363,12 +363,12 @@ else
                     <table class="table table-sm mb-0">
                         <thead>
                             <tr>
-                                <th>Table</th>
+                                <th class="d-none d-sm-table-cell">#</th>
                                 <th>Player 1</th>
                                 <th>Player 2</th>
-                                <th>First turn</th>
-                                <th>Attacker</th>
-                                <th style="width:130px">Scores</th>
+                                <th class="d-none d-md-table-cell">First turn</th>
+                                <th class="d-none d-md-table-cell">Attacker</th>
+                                <th>Scores</th>
                                 <th></th>
                             </tr>
                         </thead>
@@ -377,10 +377,10 @@ else
                             {
                                 var isBye = match.Player2Id is null;
                                 <tr>
-                                    <td>@match.TableNumber</td>
+                                    <td class="d-none d-sm-table-cell">@match.TableNumber</td>
                                     <td>@(match.Player1?.Name ?? "—")</td>
                                     <td>@(isBye ? "— (bye)" : (match.Player2?.Name ?? "—"))</td>
-                                    <td class="text-muted small">
+                                    <td class="text-muted small d-none d-md-table-cell">
                                         @if (match.Player1WentFirst == true) { <span>@(match.Player1?.Name ?? "P1")</span> }
                                         else if (match.Player1WentFirst == false) { <span>@(match.Player2?.Name ?? "P2")</span> }
                                         else if (!isBye && !match.IsScored)
@@ -394,7 +394,7 @@ else
                                         }
                                         else { <span>—</span> }
                                     </td>
-                                    <td class="text-muted small">
+                                    <td class="text-muted small d-none d-md-table-cell">
                                         @if (match.Player1IsAttacker == true) { <span>@(match.Player1?.Name ?? "P1")</span> }
                                         else if (match.Player1IsAttacker == false) { <span>@(match.Player2?.Name ?? "P2")</span> }
                                         else if (!isBye && !match.IsScored)
@@ -421,12 +421,12 @@ else
                                         {
                                             var inputs = GetScoreInputs(match.Id);
                                             <div class="d-flex gap-1 align-items-center">
-                                                <input type="number" class="form-control form-control-sm" style="width:60px"
+                                                <input type="number" class="form-control form-control-sm score-input"
                                                        min="0" placeholder="P1"
                                                        value="@inputs.p1"
                                                        @oninput="e => SetScore(match.Id, true, e.Value?.ToString())" />
                                                 <span>—</span>
-                                                <input type="number" class="form-control form-control-sm" style="width:60px"
+                                                <input type="number" class="form-control form-control-sm score-input"
                                                        min="0" placeholder="P2"
                                                        value="@inputs.p2"
                                                        @oninput="e => SetScore(match.Id, false, e.Value?.ToString())" />

@@ -327,6 +327,33 @@ a:hover, .btn-link:hover {
     color: var(--color-text);
 }
 
+/* Table row colour variants — Bootstrap compiles these to light pastels */
+[data-theme="dark"] .table-primary,
+[data-theme="dark"] .table-primary > td,
+[data-theme="dark"] .table-primary > th {
+    /* "You" row on the leaderboard — warm gold tint instead of Bootstrap's light blue */
+    background-color: color-mix(in srgb, var(--color-gold) 12%, var(--color-surface) 88%) !important;
+    color: var(--color-text) !important;
+}
+[data-theme="dark"] .table-success,
+[data-theme="dark"] .table-success > td,
+[data-theme="dark"] .table-success > th {
+    background-color: color-mix(in srgb, #198754 12%, var(--color-surface) 88%) !important;
+    color: var(--color-text) !important;
+}
+[data-theme="dark"] .table-danger,
+[data-theme="dark"] .table-danger > td,
+[data-theme="dark"] .table-danger > th {
+    background-color: color-mix(in srgb, var(--color-crimson) 12%, var(--color-surface) 88%) !important;
+    color: var(--color-text) !important;
+}
+[data-theme="dark"] .table-warning,
+[data-theme="dark"] .table-warning > td,
+[data-theme="dark"] .table-warning > th {
+    background-color: color-mix(in srgb, #ffc107 12%, var(--color-surface) 88%) !important;
+    color: var(--color-text) !important;
+}
+
 /* Bootstrap text-colour utilities that hardcode dark values */
 [data-theme="dark"] .text-body          { color: var(--color-text)       !important; }
 [data-theme="dark"] .text-body-secondary { color: var(--color-text-muted) !important; }

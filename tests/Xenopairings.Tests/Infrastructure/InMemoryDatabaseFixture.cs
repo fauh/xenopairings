@@ -1,4 +1,3 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xenopairings.Data;
 
@@ -9,20 +8,19 @@ namespace Xenopairings.Tests.Infrastructure;
 public sealed class InMemoryDatabaseFixture : IAsyncLifetime
 #pragma warning restore CA1001
 {
-    private SqliteConnection? _connection;
     private DbContextOptions<AppDbContext>? _options;
 
-    public async Task InitializeAsync()
+    public Task InitializeAsync()
     {
-        _connection = new SqliteConnection("Data Source=:memory:");
-        await _connection.OpenAsync();
-
+        // Use a unique database name per fixture instance so parallel test classes don't share state.
+        var dbName = $"xenopairings_test_{Guid.NewGuid():N}";
         _options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite(_connection)
+            .UseInMemoryDatabase(dbName)
             .Options;
 
-        await using var ctx = new AppDbContext(_options);
-        await ctx.Database.MigrateAsync();
+        using var ctx = new AppDbContext(_options);
+        ctx.Database.EnsureCreated();  // In-memory provider: EnsureCreated applies the current model
+        return Task.CompletedTask;
     }
 
     public AppDbContext CreateDbContext()
@@ -31,9 +29,5 @@ public sealed class InMemoryDatabaseFixture : IAsyncLifetime
         return new AppDbContext(_options);
     }
 
-    public async Task DisposeAsync()
-    {
-        if (_connection is not null)
-            await _connection.DisposeAsync();
-    }
+    public Task DisposeAsync() => Task.CompletedTask;
 }

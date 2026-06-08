@@ -1,10 +1,13 @@
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Xenopairings.Models;
 
 namespace Xenopairings.Data;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options), IDataProtectionKeyContext
 {
+    // DataProtection keys stored in DB so antiforgery tokens survive redeploys
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Tournament> Tournaments => Set<Tournament>();
     public DbSet<Player> Players => Set<Player>();

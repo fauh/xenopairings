@@ -1,5 +1,3 @@
-using Hangfire;
-using Hangfire.Storage.SQLite;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -12,37 +10,36 @@ using Xenopairings.Data;
 using Xenopairings.Models;
 using Xenopairings.Services;
 using Xenopairings.Services.Auth;
-using Xenopairings.Services.GitHub;
-using Xenopairings.Services.Organizations;
-using Xenopairings.Services.Reports;
-using Xenopairings.Services.TopCut;
-using Xenopairings.Services.Backups;
 using Xenopairings.Services.Elo;
 using Xenopairings.Services.Email;
+using Xenopairings.Services.GitHub;
+using Xenopairings.Services.Organizations;
 using Xenopairings.Services.Players;
 using Xenopairings.Services.Reminders;
+using Xenopairings.Services.Reports;
 using Xenopairings.Services.Rounds;
 using Xenopairings.Services.Standings;
 using Xenopairings.Services.Teams;
+using Xenopairings.Services.TopCut;
 using Xenopairings.Services.Tournaments;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ── Connection string — DATA_DIR env var for container deployments ────────────
-// Development default: DATA_DIR not set → "Data Source=xenopairings.db" (relative to CWD).
-// Production: DATA_DIR=/home/data is set so SQLite writes to the mounted persistent volume.
-var dataDir = Environment.GetEnvironmentVariable("DATA_DIR");
-if (!string.IsNullOrWhiteSpace(dataDir))
+// ── Database — PostgreSQL ─────────────────────────────────────────────────────
+// Railway injects DATABASE_URL as a postgres:// URI.
+// Locally, set ConnectionStrings:DefaultConnection in appsettings.json.
+var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+if (!string.IsNullOrWhiteSpace(databaseUrl))
 {
-    builder.Configuration["ConnectionStrings:DefaultConnection"] =
-        $"Data Source={Path.Combine(dataDir, "xenopairings.db")}";
-
-    // ── Data Protection keys — persist to the mounted volume ──────────────────
-    builder.Services.AddDataProtection()
-        .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "dataprotection-keys")));
+    // Convert postgres:// URI → Npgsql connection string
+    var uri = new Uri(databaseUrl);
+    var userInfo = uri.UserInfo.Split(':');
+    var npgsql = $"Host={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')}" +
+                 $";Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
+    builder.Configuration["ConnectionStrings:DefaultConnection"] = npgsql;
 }
 
-// ── Forwarded headers — must run early so IP-based rate limiting sees real IPs ──
+// ── Forwarded headers ─────────────────────────────────────────────────────────
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -50,118 +47,69 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 
-// ── Rate limiting ────────────────────────────────────────────────────────────
+// ── Rate limiting ─────────────────────────────────────────────────────────────
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
-    // 5 tournament-creation POSTs per IP per day
     options.AddPolicy("tournament-creation", httpCtx =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: httpCtx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 5,
-                Window = TimeSpan.FromDays(1),
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0,
-            }));
-
-    // 30 player registrations per IP per day
+            httpCtx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromDays(1) }));
     options.AddPolicy("player-registration", httpCtx =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: httpCtx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 30,
-                Window = TimeSpan.FromDays(1),
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0,
-            }));
+            httpCtx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromDays(1) }));
 });
 
-// ── Background jobs / Hangfire — conditionally disabled ─────────────────────
-builder.Services.Configure<RemindersSettings>(
-    builder.Configuration.GetSection(RemindersSettings.SectionName));
-
-var remindersSettings = builder.Configuration
-    .GetSection(RemindersSettings.SectionName)
-    .Get<RemindersSettings>() ?? new RemindersSettings();
-
-// ── Core services ────────────────────────────────────────────────────────────
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+// ── Core services ─────────────────────────────────────────────────────────────
+builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddRazorPages();
 builder.Services.AddAntiforgery();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHealthChecks();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// ── Email ────────────────────────────────────────────────────────────────────
-builder.Services.Configure<EmailSettings>(
-    builder.Configuration.GetSection(EmailSettings.SectionName));
+// DataProtection keys stored in PostgreSQL so they survive redeploys
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<AppDbContext>();
 
-var emailSettings = builder.Configuration
-    .GetSection(EmailSettings.SectionName)
-    .Get<EmailSettings>() ?? new EmailSettings();
-
-if (emailSettings.UseRealProvider)
-{
-    if (string.IsNullOrWhiteSpace(emailSettings.ApiKey))
-        throw new InvalidOperationException(
-            "EmailSettings:ApiKey must be set when EmailSettings:UseRealProvider is true.");
-
-    builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>();
-}
-else
-{
-    builder.Services.AddScoped<IEmailSender, ConsoleEmailSender>();
-}
-
-// ── Hangfire (only when enabled) ─────────────────────────────────────────────
-if (remindersSettings.Enabled)
-{
-    var hangfireConnStr = builder.Configuration.GetConnectionString("DefaultConnection")
-        ?? "Data Source=xenopairings.db";
-    builder.Services.AddHangfire(config =>
-        config.UseSimpleAssemblyNameTypeSerializer()
-              .UseRecommendedSerializerSettings()
-              .UseSQLiteStorage(hangfireConnStr));
-    builder.Services.AddHangfireServer();
-}
-
+// ── Reminders (disabled — no Hangfire in this deployment) ────────────────────
+builder.Services.Configure<RemindersSettings>(
+    builder.Configuration.GetSection(RemindersSettings.SectionName));
 builder.Services.AddScoped<IReminderService, NullReminderService>();
 
-// ── Backup settings ──────────────────────────────────────────────────────────
-builder.Services.Configure<BackupSettings>(
-    builder.Configuration.GetSection(BackupSettings.SectionName));
-builder.Services.AddTransient<BackupJob>();
+// ── Email ─────────────────────────────────────────────────────────────────────
+builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection(EmailSettings.SectionName));
+var emailSettings = builder.Configuration.GetSection(EmailSettings.SectionName).Get<EmailSettings>()
+    ?? new EmailSettings();
 
-// ── App services ─────────────────────────────────────────────────────────────
+if (emailSettings.UseRealProvider)
+    builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>();
+else
+    builder.Services.AddScoped<IEmailSender, ConsoleEmailSender>();
+
+// ── App services ──────────────────────────────────────────────────────────────
 builder.Services.AddSingleton<TokenGenerator>();
 builder.Services.AddSingleton<SlugGenerator>();
+builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+
+builder.Services.Configure<AdminSettings>(builder.Configuration.GetSection(AdminSettings.SectionName));
+builder.Services.Configure<GitHubSettings>(builder.Configuration.GetSection(GitHubSettings.SectionName));
+
+builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITournamentService, TournamentService>();
 builder.Services.AddScoped<IPlayerService, PlayerService>();
 builder.Services.AddScoped<StandingsService>();
 builder.Services.AddScoped<TeamStandingsService>();
 builder.Services.AddScoped<IRoundService, RoundService>();
-// RoundService takes IEmailSender + IOptions<EmailSettings> — already registered above
 builder.Services.AddScoped<ITeamService, TeamService>();
-builder.Services.Configure<AdminSettings>(
-    builder.Configuration.GetSection(AdminSettings.SectionName));
-builder.Services.AddScoped<IAuthService, AuthService>();
-
-// ── GitHub issue service ──────────────────────────────────────────────────────
-builder.Services.Configure<GitHubSettings>(
-    builder.Configuration.GetSection(GitHubSettings.SectionName));
-builder.Services.AddHttpClient<GitHubIssueService>();
 builder.Services.AddScoped<IOrganizationService, OrganizationService>();
 builder.Services.AddScoped<IEloService, EloService>();
 builder.Services.AddScoped<IPlayerReportService, PlayerReportService>();
 builder.Services.AddScoped<ITopCutService, TopCutService>();
-builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services.AddHttpClient<GitHubIssueService>();
 
 // ── Cookie authentication ─────────────────────────────────────────────────────
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -179,6 +127,7 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+// Auto-migrate on startup
 using (var scope = app.Services.CreateScope())
 {
     scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
@@ -193,32 +142,15 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseRateLimiter();
-
 app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
 
-if (app.Environment.IsDevelopment() && remindersSettings.Enabled)
-{
-    app.UseHangfireDashboard();
-}
-
-if (remindersSettings.Enabled)
-{
-    // Nightly backup at 03:00 UTC
-    RecurringJob.AddOrUpdate<BackupJob>(
-        "nightly-backup",
-        job => job.RunAsync(CancellationToken.None),
-        "0 3 * * *",
-        new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
-}
-
 app.MapStaticAssets();
 app.MapHealthChecks("/health");
 app.MapRazorPages();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 app.Run();

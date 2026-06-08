@@ -193,7 +193,8 @@ a:hover, .btn-link:hover {
     border-color: var(--color-primary);
 }
 /* Bootstrap 5.1 hardcodes #e9ecef on readonly inputs — override to respect theme */
-.form-control[readonly] {
+.form-control[readonly],
+.form-select[readonly] {
     background-color: color-mix(in srgb, var(--color-surface) 85%, var(--color-border) 15%);
     color: var(--color-text-muted);
     border-color: var(--color-border);
@@ -210,21 +211,19 @@ a:hover, .btn-link:hover {
     --bs-table-color: var(--color-text);
     --bs-table-border-color: var(--color-border);
 }
-/* thead headers: dark background with gold-light text so they're always readable.
-   Bootstrap's default thead applies a subtle darker shade that becomes invisible
-   against our dark surface in dark mode. */
+/* thead: consistent dark header with gold text in both themes.
+   Warm near-black (#2d2010) in light mode, dark-grey in dark mode. */
 .table thead th,
 .table thead td {
-    background-color: var(--color-dark-grey) !important;
-    color: var(--color-gold-light) !important;
-    border-bottom-color: var(--color-gold) !important;
+    background-color: #2d2010;
+    color: var(--color-gold-light);
+    border-bottom-color: var(--color-gold);
     font-weight: 600;
+    letter-spacing: 0.03em;
 }
-/* Light mode override — use a warm dark grey that still reads well */
-:root .table thead th,
-:root .table thead td {
-    background-color: #2d2010 !important;
-    color: var(--color-gold-light) !important;
+[data-theme="dark"] .table thead th,
+[data-theme="dark"] .table thead td {
+    background-color: var(--color-dark-grey);
 }
 
 /* ── Report flag button ── */
@@ -237,27 +236,6 @@ a:hover, .btn-link:hover {
     transition: opacity 0.15s;
 }
 .report-flag:hover { opacity: 0.9; }
-
-/* ── Form control: readonly inputs ── */
-/* Bootstrap applies a slightly different bg to readonly inputs that doesn't
-   inherit our dark surface colour properly in dark mode. */
-.form-control[readonly],
-.form-select[readonly] {
-    background-color: var(--color-surface);
-    color: var(--color-text-muted);
-    border-color: var(--color-border);
-    opacity: 1;
-}
-
-/* thead: consistent dark header with gold text in both themes */
-.table thead th,
-.table thead td {
-    background-color: var(--color-dark-grey);
-    color: var(--color-gold-light);
-    border-bottom-color: var(--color-gold);
-    font-weight: 600;
-    letter-spacing: 0.03em;
-}
 
 /* ── Bootstrap text-bg-* polyfill (not in Bootstrap 5.1) ── */
 /* Bootstrap 5.2 introduced text-bg-{color} convenience classes.

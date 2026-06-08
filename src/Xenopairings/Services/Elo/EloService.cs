@@ -215,6 +215,15 @@ public sealed class EloService(AppDbContext db) : IEloService
         await db.SaveChangesAsync();
     }
 
+    public async Task UpdateDisplayNameAsync(string email, string displayName)
+    {
+        var normalised = email.Trim().ToLowerInvariant();
+        var rating = await db.PlayerRatings.FirstOrDefaultAsync(r => r.Email == normalised);
+        if (rating is null) return;
+        rating.DisplayName = displayName.Trim();
+        await db.SaveChangesAsync();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static (double actual1, double actual2) ComputeOutcomes(

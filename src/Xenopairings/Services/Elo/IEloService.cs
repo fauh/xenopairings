@@ -28,6 +28,13 @@ public interface IEloService
     Task EnsureRatingAsync(string email, string displayName);
 
     /// <summary>
+    /// Updates the display name on an existing PlayerRating.
+    /// No-op if no rating exists for this email.
+    /// Called when a registered user registers for a tournament with a chosen name.
+    /// </summary>
+    Task UpdateDisplayNameAsync(string email, string displayName);
+
+    /// <summary>
     /// Returns the player's rating and full match history, ordered oldest-first.
     /// Returns null if the rating ID does not exist.
     /// </summary>

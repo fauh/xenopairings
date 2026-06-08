@@ -47,7 +47,7 @@ else
                             else { <span class="text-muted">@rank</span> }
                         </td>
                         <td>
-                            @if (rating.IsProfilePublic)
+                            @if (rating.IsProfilePublic || isMe)
                             {
                                 <a href="/player/@rating.Id">@rating.DisplayName</a>
                             }

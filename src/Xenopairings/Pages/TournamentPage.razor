@@ -598,8 +598,6 @@ else
                         <th>#</th>
                         <th>Player</th>
                         <th class="d-none d-sm-table-cell">Faction</th>
-                        <th>W</th>
-                        <th>Pts</th>
                         @foreach (var (r, _) in orderedRounds)
                         {
                             <th class="text-center small standings-round-col">R@(r.RoundNumber)</th>
@@ -615,8 +613,6 @@ else
                             <td>@pos</td>
                             <td>@PlayerNameCell(player)</td>
                             <td class="d-none d-sm-table-cell">@(player?.ArmyFaction ?? "—")</td>
-                            <td>@standing.Wins</td>
-                            <td>@standing.TotalPoints</td>
                             @foreach (var (_, matches) in orderedRounds)
                             {
                                 var m = matches.FirstOrDefault(x =>

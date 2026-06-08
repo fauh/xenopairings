@@ -26,31 +26,20 @@ using Xenopairings.Services.Tournaments;
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Database — PostgreSQL ─────────────────────────────────────────────────────
-// Priority:
-//   1. DATABASE_URL  — Railway injects this when a PostgreSQL service is linked.
-//                      Npgsql 7+ accepts postgres:// URIs directly.
-//   2. PGHOST etc.   — Railway also sets individual PG* vars; use as fallback.
-//   3. appsettings   — local development default (localhost).
-var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
-var pgHost      = Environment.GetEnvironmentVariable("PGHOST");
-
-if (!string.IsNullOrWhiteSpace(databaseUrl))
+// Railway sets individual PG* variables when a PostgreSQL service is linked.
+// Build a plain Npgsql key=value connection string from them — avoids all URI
+// parsing issues. Falls back to appsettings.json for local development.
+var pgHost = Environment.GetEnvironmentVariable("PGHOST");
+if (!string.IsNullOrWhiteSpace(pgHost))
 {
-    // Pass the URI straight to Npgsql — no manual parsing needed.
-    // Append SSL options via query string if not already present.
-    if (!databaseUrl.Contains("sslmode", StringComparison.OrdinalIgnoreCase))
-        databaseUrl += (databaseUrl.Contains('?') ? "&" : "?") + "sslmode=require&Trust%20Server%20Certificate=true";
-    builder.Configuration["ConnectionStrings:DefaultConnection"] = databaseUrl;
-}
-else if (!string.IsNullOrWhiteSpace(pgHost))
-{
-    // Fallback: build from individual Railway PG* environment variables.
-    var connStr = $"Host={pgHost};" +
-                  $"Port={Environment.GetEnvironmentVariable("PGPORT") ?? "5432"};" +
-                  $"Database={Environment.GetEnvironmentVariable("PGDATABASE")};" +
-                  $"Username={Environment.GetEnvironmentVariable("PGUSER")};" +
-                  $"Password={Environment.GetEnvironmentVariable("PGPASSWORD")};" +
-                  "SSL Mode=Require;Trust Server Certificate=true";
+    var connStr = new System.Text.StringBuilder()
+        .Append("Host=").Append(pgHost).Append(';')
+        .Append("Port=").Append(Environment.GetEnvironmentVariable("PGPORT") ?? "5432").Append(';')
+        .Append("Database=").Append(Environment.GetEnvironmentVariable("PGDATABASE")).Append(';')
+        .Append("Username=").Append(Environment.GetEnvironmentVariable("PGUSER")).Append(';')
+        .Append("Password=").Append(Environment.GetEnvironmentVariable("PGPASSWORD")).Append(';')
+        .Append("SSL Mode=Require;Trust Server Certificate=true")
+        .ToString();
     builder.Configuration["ConnectionStrings:DefaultConnection"] = connStr;
 }
 

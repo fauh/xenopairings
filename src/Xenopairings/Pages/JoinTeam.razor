@@ -45,6 +45,13 @@ else if (_joined)
 else if (_team is not null)
 {
     <div style="max-width:480px;margin:4rem auto;padding:0 1rem">
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/t/@Slug">@(_tournament?.Title ?? Slug)</a></li>
+            <li class="breadcrumb-item active">Join team</li>
+        </ol>
+    </nav>
+
         <h1>Join team</h1>
         <div class="card mb-4">
             <div class="card-body">

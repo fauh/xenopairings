@@ -41,7 +41,9 @@ else
                 {
                     <div class="alert alert-danger py-2 small">@_createError</div>
                 }
-                <button class="btn btn-primary btn-sm me-2" @onclick="CreateOrg" disabled="@_saving">Create</button>
+                <button class="btn btn-primary btn-sm me-2" @onclick="CreateOrg" disabled="@_saving">
+                    @(_saving ? "Creating…" : "Create")
+                </button>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="() => _showCreate = false">Cancel</button>
             </div>
         </div>
@@ -53,7 +55,9 @@ else
             <h2 class="h6 card-title">Join with invite code</h2>
             <div class="input-group">
                 <input class="form-control" @bind="_joinCode" placeholder="Paste invite code" />
-                <button class="btn btn-outline-primary" @onclick="JoinByCode" disabled="@_saving">Join</button>
+                <button class="btn btn-outline-primary" @onclick="JoinByCode" disabled="@_saving">
+                    @(_saving ? "Joining…" : "Join")
+                </button>
             </div>
             @if (!string.IsNullOrEmpty(_joinError))
             {

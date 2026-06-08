@@ -32,6 +32,13 @@ else if (_tournament is null)
 }
 else
 {
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/t/@_tournament.Slug">@_tournament.Title</a></li>
+            <li class="breadcrumb-item active">Manage</li>
+        </ol>
+    </nav>
+
     <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
         <h1>@_tournament.Title <small class="text-muted fs-6">— Manage</small></h1>
         <a href="/t/@_tournament.Slug" class="btn btn-outline-secondary btn-sm">Public view</a>
@@ -292,7 +299,7 @@ else
     <h2 class="h5">Players</h2>
     @if (!_players.Any())
     {
-        <p class="text-muted mb-4">No players yet.</p>
+        <div class="text-muted small mb-4 fst-italic">No players registered yet.</div>
     }
     else
     {
@@ -329,7 +336,7 @@ else
 
     @if (!_rounds.Any())
     {
-        <p class="text-muted">No rounds yet. Create the first round below to generate pairings.</p>
+        <div class="text-muted small fst-italic mb-2">No rounds yet — create the first round below to generate pairings.</div>
     }
 
     @foreach (var round in _rounds)

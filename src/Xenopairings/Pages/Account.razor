@@ -40,7 +40,7 @@ else
                                placeholder="Your display name" />
                         <button class="btn btn-outline-primary"
                                 @onclick="SaveDisplayName" disabled="@_saving">
-                            Save
+                            @(_saving ? "Saving…" : "Save")
                         </button>
                     </div>
                     @if (_displayNameMsg is not null)
@@ -68,7 +68,7 @@ else
                     </div>
                     <button class="btn btn-outline-primary btn-sm"
                             @onclick="SaveEmail" disabled="@_saving">
-                        Update email
+                        @(_saving ? "Saving…" : "Update email")
                     </button>
                     @if (_emailMsg is not null)
                     {
@@ -100,7 +100,7 @@ else
                     </div>
                     <button class="btn btn-outline-primary btn-sm"
                             @onclick="SavePassword" disabled="@_saving">
-                        Change password
+                        @(_saving ? "Saving…" : "Change password")
                     </button>
                     @if (_passwordMsg is not null)
                     {

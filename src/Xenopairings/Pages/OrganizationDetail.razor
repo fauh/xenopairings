@@ -37,7 +37,9 @@ else
         <h1 class="mb-0">@_org.Name</h1>
         @if (_isMember)
         {
-            <button class="btn btn-outline-danger btn-sm" @onclick="Leave">Leave organization</button>
+            <button class="btn btn-outline-danger btn-sm" @onclick="Leave" disabled="@_saving">
+                @(_saving ? "Leaving…" : "Leave organization")
+            </button>
         }
     </div>
 
@@ -108,6 +110,7 @@ else
 
     private Organization? _org;
     private bool _loading = true;
+    private bool _saving;
     private bool _isMember;
     private Guid? _userId;
     private Dictionary<string, PlayerRating> _ratings = [];
@@ -137,6 +140,7 @@ else
     private async Task Leave()
     {
         if (_org is null || _userId is null) return;
+        _saving = true;
         await OrgService.LeaveAsync(_org.Id, _userId.Value);
         Nav.NavigateTo("/organizations");
     }

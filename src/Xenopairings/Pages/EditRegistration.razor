@@ -43,8 +43,14 @@ else if (_withdrawn)
 }
 else
 {
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/t/@Slug">@(_tournament?.Title ?? Slug)</a></li>
+            <li class="breadcrumb-item active">Edit registration</li>
+        </ol>
+    </nav>
+
     <h1>Edit your registration</h1>
-    <p class="text-muted">Tournament: <a href="/t/@Slug">@(_tournament?.Title ?? Slug)</a></p>
 
     <div class="card mb-4" style="max-width:500px">
         <div class="card-body">

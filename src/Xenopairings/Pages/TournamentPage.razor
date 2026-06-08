@@ -41,6 +41,13 @@ else if (_tournament is null)
 }
 else
 {
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/tournaments">Tournaments</a></li>
+            <li class="breadcrumb-item active">@_tournament.Title</li>
+        </ol>
+    </nav>
+
     <h1>@_tournament.Title</h1>
 
     @if (!string.IsNullOrWhiteSpace(_tournament.Description))
@@ -459,7 +466,7 @@ else
             @* Pairings — all tables, player's row first + highlighted *@
             @if (!matches.Any())
             {
-                <p class="text-muted small">No pairings yet.</p>
+                <p class="text-muted small fst-italic">No pairings generated yet.</p>
             }
             else
             {

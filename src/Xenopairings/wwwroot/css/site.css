@@ -76,6 +76,15 @@
     --bs-link-hover-color:   var(--color-primary-hover);
 }
 
+/* Dark mode card header tweak — slightly lighter dark surface */
+[data-theme="dark"] .card-header {
+    background-color: #111111;
+    border-bottom-color: var(--color-gold);
+}
+[data-theme="dark"] .card {
+    box-shadow: 0 2px 12px rgba(0,0,0,0.40);
+}
+
 /* ── Base ── */
 html, body {
     font-family: var(--bs-body-font-family);
@@ -85,6 +94,17 @@ html, body {
     transition: background-color 0.2s, color 0.2s;
 }
 h1:focus { outline: none; }
+
+/* ── Headings — heavier weights, slight spacing for codex feel ── */
+h1, h2 {
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+h3, h4, h5 {
+    font-weight: 700;
+}
+h1 { line-height: 1.15; }
+h2 { line-height: 1.2; }
 
 a, .btn-link {
     color: var(--color-link);
@@ -138,7 +158,28 @@ a:hover, .btn-link:hover {
 .card {
     background-color: var(--color-surface);
     border-color: var(--color-border);
+    border-top: 2px solid var(--color-gold);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.10);
 }
+
+/* Dark card headers — tournament sections, round headers, etc. */
+.card-header {
+    background-color: var(--color-dark-grey);
+    border-bottom-color: var(--color-gold);
+    color: var(--color-gold-light);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+/* Ensure text inside card-header inherits the gold colour */
+.card-header strong,
+.card-header .badge {
+    color: inherit;
+}
+/* Override Bootstrap's bg- helpers inside card-header */
+.card-header.bg-primary  { background-color: var(--color-dark-red) !important; color: #fff !important; }
+.card-header.bg-success  { background-color: #1a4a1a !important; color: #9fdf9f !important; }
+.card-header.bg-warning  { background-color: #3a2a00 !important; color: var(--color-gold-light) !important; }
+.card-header.bg-danger   { background-color: #3a0a0a !important; color: #f4a0a0 !important; }
 
 /* ── Form controls ── */
 .form-control, .form-select {
@@ -183,16 +224,18 @@ a:hover, .btn-link:hover {
     align-items: center;
     justify-content: space-between;
     min-height: 3.25rem;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.35);
+    border-bottom: 2px solid var(--color-gold);
     position: sticky;
     top: 0;
     z-index: 100;
 }
 .app-topnav .navbar-brand {
     color: var(--color-nav-brand);
-    font-weight: 700;
-    font-size: 1.25rem;
-    letter-spacing: 0.02em;
+    font-weight: 900;
+    font-size: 1.35rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     text-decoration: none;
 }
 .app-topnav .navbar-brand:hover { color: var(--color-accent); }
@@ -251,7 +294,7 @@ a:hover, .btn-link:hover {
     padding: 3rem 1rem;
     color: var(--color-text-muted);
 }
-.empty-state-icon { font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.5; }
+.empty-state-icon { font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.65; filter: sepia(0.4); }
 .empty-state h3 {
     font-size: 1.1rem;
     font-weight: 600;

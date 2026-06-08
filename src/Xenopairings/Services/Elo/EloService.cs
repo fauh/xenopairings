@@ -208,6 +208,13 @@ public sealed class EloService(AppDbContext db) : IEloService
         await db.SaveChangesAsync();
     }
 
+    public async Task EnsureRatingAsync(string email, string displayName)
+    {
+        // GetOrCreateAsync only adds to the change tracker — call SaveChanges after.
+        await GetOrCreateAsync(email, displayName);
+        await db.SaveChangesAsync();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static (double actual1, double actual2) ComputeOutcomes(

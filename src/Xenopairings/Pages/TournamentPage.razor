@@ -831,6 +831,14 @@ else
         var ratingList = await EloService.GetLeaderboardAsync();
         _playerRatings = ratingList.ToDictionary(r => r.Email, StringComparer.OrdinalIgnoreCase);
 
+        // Pre-fill the registration form name from the player's leaderboard display name.
+        if (_sessionEmail is not null
+            && _playerRatings.TryGetValue(_sessionEmail, out var myRating)
+            && !string.IsNullOrWhiteSpace(myRating.DisplayName))
+        {
+            _regModel.Name = myRating.DisplayName;
+        }
+
         // Load user's organisations for the registration org-picker
         if (_sessionEmail is not null)
         {
@@ -913,8 +921,11 @@ else
                 string.Equals(p.Email, _sessionEmail, StringComparison.OrdinalIgnoreCase));
             if (myPlayer is null)
             {
+                var name = _playerRatings.TryGetValue(_sessionEmail, out var pr) && !string.IsNullOrWhiteSpace(pr.DisplayName)
+                    ? pr.DisplayName
+                    : _sessionEmail.Split('@')[0];
                 myPlayer = await PlayerService.RegisterAsync(new Services.Players.RegisterPlayerRequest(
-                    TournamentId: _tournament.Id, Name: _sessionEmail.Split('@')[0],
+                    TournamentId: _tournament.Id, Name: name,
                     Email: _sessionEmail, ArmyFaction: null, ArmyList: null));
                 _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
                 _myPlayerId = myPlayer.Id;
@@ -943,8 +954,11 @@ else
                 string.Equals(p.Email, _sessionEmail, StringComparison.OrdinalIgnoreCase));
             if (myPlayer is null)
             {
+                var joinName = _playerRatings.TryGetValue(_sessionEmail, out var joinRating) && !string.IsNullOrWhiteSpace(joinRating.DisplayName)
+                    ? joinRating.DisplayName
+                    : _sessionEmail.Split('@')[0];
                 myPlayer = await PlayerService.RegisterAsync(new Services.Players.RegisterPlayerRequest(
-                    TournamentId: _tournament.Id, Name: _sessionEmail.Split('@')[0],
+                    TournamentId: _tournament.Id, Name: joinName,
                     Email: _sessionEmail, ArmyFaction: null, ArmyList: null));
                 _players = [.. await PlayerService.ListByTournamentAsync(_tournament.Id)];
                 _myPlayerId = myPlayer.Id;

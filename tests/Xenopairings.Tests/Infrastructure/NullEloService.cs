@@ -17,4 +17,7 @@ public sealed class NullEloService : IEloService
     public Task SetProfileVisibilityAsync(Guid ratingId, bool isPublic) => Task.CompletedTask;
     public Task EnsureRatingAsync(string email, string displayName) => Task.CompletedTask;
     public Task UpdateDisplayNameAsync(string email, string displayName) => Task.CompletedTask;
+    public Task<IReadOnlyList<EloTournamentSummary>> GetHistoryByTournamentAsync() =>
+        Task.FromResult<IReadOnlyList<EloTournamentSummary>>([]);
+    public Task RevertTournamentEloAsync(Guid tournamentId) => Task.CompletedTask;
 }

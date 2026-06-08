@@ -5,10 +5,12 @@
 @using Xenopairings.Models
 @using Xenopairings.Services.Auth
 @using Xenopairings.Services.Organizations
+@using Xenopairings.Services.Elo
 @using Xenopairings.Services.Tournaments
 @inject ITournamentService TournamentService
 @inject IAuthService AuthService
 @inject IOrganizationService OrgService
+@inject IEloService EloService
 @inject IOptions<AdminSettings> AdminOptions
 
 <PageTitle>Admin — Xenopairings</PageTitle>
@@ -146,6 +148,85 @@ else
             </table>
         </div>
     }
+
+    @* ── ELO history ────────────────────────────────────────────────────────── *@
+    <h2 class="h5 mt-4">ELO history by tournament</h2>
+    <p class="text-muted small mb-3">
+        Each row covers one tournament's ELO impact. "Revert" undoes that tournament's
+        rating changes for all affected players and removes its history entries.
+    </p>
+    @if (!_eloHistory.Any())
+    {
+        <p class="text-muted small">No ELO history yet.</p>
+    }
+    else
+    {
+        <div class="table-responsive mb-4">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Tournament</th>
+                        <th>Played</th>
+                        <th>Players</th>
+                        <th>Matches</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var summary in _eloHistory)
+                    {
+                        <tr>
+                            <td>
+                                <a href="/t/@summary.TournamentSlug">@summary.TournamentTitle</a>
+                            </td>
+                            <td class="text-muted small text-nowrap">
+                                @summary.PlayedAt.ToLocalTime().ToString("d MMM yyyy")
+                            </td>
+                            <td class="text-muted small">@summary.PlayerCount</td>
+                            <td class="text-muted small">@summary.MatchCount</td>
+                            <td>
+                                @if (_confirmRevertElo == summary.TournamentId)
+                                {
+                                    <span class="text-danger small me-2">Revert ELO for "@summary.TournamentTitle"?</span>
+                                    <button class="btn btn-sm btn-danger me-1"
+                                            @onclick="() => RevertElo(summary.TournamentId)"
+                                            disabled="@_saving">Yes</button>
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            @onclick="() => _confirmRevertElo = null">No</button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            @onclick="() => _confirmRevertElo = summary.TournamentId"
+                                            disabled="@_saving">Revert</button>
+                                }
+                            </td>
+                        </tr>
+                        @* Per-player delta breakdown *@
+                        @if (summary.PlayerDeltas.Any())
+                        {
+                            <tr>
+                                <td colspan="5" class="pt-0 pb-2 px-3">
+                                    <div class="d-flex flex-wrap gap-3">
+                                        @foreach (var d in summary.PlayerDeltas)
+                                        {
+                                            var sign  = d.Delta >= 0 ? "+" : "";
+                                            var color = d.Delta >= 0 ? "text-success" : "text-danger";
+                                            <span class="small text-muted">
+                                                @d.DisplayName
+                                                <span class="@color fw-semibold">@sign@((int)Math.Round(d.Delta))</span>
+                                                <span class="text-muted">(@((int)Math.Round(d.RatingBefore))→@((int)Math.Round(d.RatingAfter)))</span>
+                                            </span>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
 }
 
 @code {
@@ -158,7 +239,9 @@ else
     private List<User> _users = [];
     private List<Tournament> _tournaments = [];
     private List<Organization> _orgs = [];
+    private IReadOnlyList<Xenopairings.Services.Elo.EloTournamentSummary> _eloHistory = [];
     private HashSet<Guid> _confirmDeleteOrg = [];
+    private Guid? _confirmRevertElo;
 
     protected override async Task OnInitializedAsync()
     {
@@ -166,9 +249,10 @@ else
         _isAdmin = authState.User.IsInRole("Admin");
         if (!_isAdmin) { _loading = false; return; }
 
-        _users = [.. await AuthService.ListAllAsync()];
+        _users       = [.. await AuthService.ListAllAsync()];
         _tournaments = [.. await TournamentService.ListAllAsync()];
-        _orgs = [.. await OrgService.ListAllAsync()];
+        _orgs        = [.. await OrgService.ListAllAsync()];
+        _eloHistory  = await EloService.GetHistoryByTournamentAsync();
         _loading = false;
     }
 
@@ -179,6 +263,16 @@ else
         await OrgService.DeleteAsync(orgId);
         _orgs = [.. await OrgService.ListAllAsync()];
         _statusMsg = "Organization deleted.";
+        _saving = false;
+    }
+
+    private async Task RevertElo(Guid tournamentId)
+    {
+        _saving = true;
+        _confirmRevertElo = null;
+        await EloService.RevertTournamentEloAsync(tournamentId);
+        _eloHistory = await EloService.GetHistoryByTournamentAsync();
+        _statusMsg = "ELO reverted.";
         _saving = false;
     }
 

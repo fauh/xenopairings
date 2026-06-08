@@ -224,6 +224,77 @@ public sealed class EloService(AppDbContext db) : IEloService
         await db.SaveChangesAsync();
     }
 
+    public async Task<IReadOnlyList<EloTournamentSummary>> GetHistoryByTournamentAsync()
+    {
+        var histories = await db.PlayerRatingHistories
+            .Include(h => h.PlayerRating)
+            .ToListAsync();
+
+        return histories
+            .GroupBy(h => h.TournamentId)
+            .Select(g =>
+            {
+                var perPlayer = g
+                    .GroupBy(h => h.PlayerRatingId)
+                    .Select(pg =>
+                    {
+                        var first = pg.First();
+                        return new EloPlayerDelta
+                        {
+                            DisplayName       = first.PlayerRating.DisplayName,
+                            RatingBefore      = first.RatingBefore,
+                            RatingAfter       = first.RatingAfter,
+                            GamesInTournament = pg.Count(),
+                        };
+                    })
+                    .OrderBy(d => d.DisplayName)
+                    .ToList();
+
+                var sample = g.First();
+                return new EloTournamentSummary
+                {
+                    TournamentId    = g.Key,
+                    TournamentTitle = sample.TournamentTitle,
+                    TournamentSlug  = sample.TournamentSlug,
+                    PlayedAt        = g.Max(h => h.PlayedAt),
+                    MatchCount      = g.Count(),
+                    PlayerCount     = perPlayer.Count,
+                    PlayerDeltas    = perPlayer,
+                };
+            })
+            .OrderByDescending(s => s.PlayedAt)
+            .ToList();
+    }
+
+    public async Task RevertTournamentEloAsync(Guid tournamentId)
+    {
+        var entries = await db.PlayerRatingHistories
+            .Where(h => h.TournamentId == tournamentId)
+            .ToListAsync();
+
+        if (entries.Count == 0) return;
+
+        // Group by player. All history entries for a player in one tournament share
+        // the same RatingBefore (pre-tournament snapshot) and RatingAfter (net result).
+        // Delta = RatingAfter - RatingBefore is the total ELO impact for that player.
+        foreach (var group in entries.GroupBy(h => h.PlayerRatingId))
+        {
+            var rating = await db.PlayerRatings.FindAsync(group.Key);
+            if (rating is null) continue;
+
+            var sample    = group.First();
+            var delta     = sample.RatingAfter - sample.RatingBefore;
+            var gameCount = group.Count();
+
+            rating.Rating      = Math.Max(0, rating.Rating - delta);
+            rating.GamesPlayed = Math.Max(0, rating.GamesPlayed - gameCount);
+            rating.LastUpdated = DateTimeOffset.UtcNow;
+        }
+
+        db.PlayerRatingHistories.RemoveRange(entries);
+        await db.SaveChangesAsync();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static (double actual1, double actual2) ComputeOutcomes(

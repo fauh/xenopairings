@@ -42,4 +42,16 @@ public interface IEloService
 
     /// <summary>Toggles the IsProfilePublic flag. Caller must verify ownership.</summary>
     Task SetProfileVisibilityAsync(Guid ratingId, bool isPublic);
+
+    /// <summary>
+    /// Returns ELO history grouped by tournament, newest-first, for the admin audit table.
+    /// </summary>
+    Task<IReadOnlyList<EloTournamentSummary>> GetHistoryByTournamentAsync();
+
+    /// <summary>
+    /// Reverts every ELO change from a tournament: subtracts (RatingAfter − RatingBefore)
+    /// from each affected player's current rating, decrements GamesPlayed by their match
+    /// count for that tournament, and deletes all history entries for it.
+    /// </summary>
+    Task RevertTournamentEloAsync(Guid tournamentId);
 }

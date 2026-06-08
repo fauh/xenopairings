@@ -225,6 +225,13 @@ else
                 __builder.AddContent(seq++, "private");
                 __builder.CloseElement();
             }
+            if (t.IsTestEvent)
+            {
+                __builder.OpenElement(seq++, "span");
+                __builder.AddAttribute(seq++, "class", "badge text-bg-warning ms-1 small");
+                __builder.AddContent(seq++, "🧪 test");
+                __builder.CloseElement();
+            }
             __builder.CloseElement(); // td title
             // Organizer
             __builder.OpenElement(seq++, "td");

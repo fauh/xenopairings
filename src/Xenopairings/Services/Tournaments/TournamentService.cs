@@ -138,6 +138,14 @@ public class TournamentService(
         await db.SaveChangesAsync();
     }
 
+    public async Task SetTestEventAsync(Guid tournamentId, bool isTest)
+    {
+        var t = await db.Tournaments.FindAsync(tournamentId);
+        if (t is null) return;
+        t.IsTestEvent = isTest;
+        await db.SaveChangesAsync();
+    }
+
     public async Task SetCheckInEnabledAsync(Guid tournamentId, bool enabled)
     {
         var t = await db.Tournaments.FindAsync(tournamentId);

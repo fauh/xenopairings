@@ -74,10 +74,28 @@
     {
         var authState = await AuthStateTask;
         var user = authState.User;
-        if (user.Identity?.IsAuthenticated == true)
+        if (user.Identity?.IsAuthenticated != true) return;
+
+        var claimVerified = user.FindFirst("email_verified")?.Value == "true";
+        if (claimVerified)
         {
-            var verified = user.FindFirst("email_verified")?.Value;
-            _showVerifyBanner = verified != "true";
+            // Cookie is up to date — no banner needed, no DB round-trip.
+            _showVerifyBanner = false;
+            return;
+        }
+
+        // Claim says unverified — but the cookie may be stale (user verified
+        // their email before the cookie-refresh fix was deployed, or a long-lived
+        // session is still active). Check the database for ground truth.
+        var email = user.FindFirst(ClaimTypes.Email)?.Value;
+        if (email is not null)
+        {
+            var dbUser = await AuthService.GetByEmailAsync(email);
+            _showVerifyBanner = !(dbUser?.EmailVerified ?? false);
+        }
+        else
+        {
+            _showVerifyBanner = true;
         }
     }
 

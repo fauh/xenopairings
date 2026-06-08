@@ -5,10 +5,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Options;
 using Xenopairings.Services.Auth;
+using Xenopairings.Services.Elo;
 
 namespace Xenopairings.Pages;
 
-public class LoginModel(IAuthService authService, IOptions<AdminSettings> adminSettings) : PageModel
+public class LoginModel(
+    IAuthService authService,
+    IEloService eloService,
+    IOptions<AdminSettings> adminSettings) : PageModel
 {
     public string? Email { get; private set; }
     public string? ErrorMessage { get; private set; }
@@ -35,6 +39,17 @@ public class LoginModel(IAuthService authService, IOptions<AdminSettings> adminS
         await HttpContext.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,
             BuildPrincipal(user.Email, user.Id, adminSettings.Value, user.EmailVerified));
+
+        // Ensure verified users always have a leaderboard entry, even if they
+        // verified their email before EnsureRatingAsync-on-verify was deployed.
+        // EnsureRatingAsync is idempotent — no-op if the row already exists.
+        if (user.EmailVerified)
+        {
+            var displayName = user.Email.Contains('@')
+                ? user.Email[..user.Email.IndexOf('@')]
+                : user.Email;
+            await eloService.EnsureRatingAsync(user.Email, displayName);
+        }
 
         if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
             return Redirect(returnUrl);

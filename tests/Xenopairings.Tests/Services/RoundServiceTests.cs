@@ -22,8 +22,6 @@ public class RoundServiceTests : IClassFixture<InMemoryDatabaseFixture>
         var standings = new StandingsService(ctx);
         return new RoundService(
             ctx, standings, new TeamStandingsService(ctx),
-            new NullEmailSender(),
-            Options.Create(new EmailSettings { BaseUrl = "https://test.example" }),
             NullLogger<RoundService>.Instance);
     }
 

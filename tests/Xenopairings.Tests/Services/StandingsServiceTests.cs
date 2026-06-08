@@ -23,8 +23,6 @@ public class StandingsServiceTests : IClassFixture<InMemoryDatabaseFixture>
         var ctx = _db.CreateDbContext();
         return new RoundService(
             ctx, new StandingsService(ctx), new TeamStandingsService(ctx),
-            new NullEmailSender(),
-            Options.Create(new EmailSettings { BaseUrl = "https://test.example" }),
             NullLogger<RoundService>.Instance);
     }
 

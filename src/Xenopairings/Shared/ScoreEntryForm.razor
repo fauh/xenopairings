@@ -16,7 +16,8 @@
                        min="0" max="45" placeholder="0"
                        value="@P1Primary"
                        @oninput="e => P1PrimaryChanged.InvokeAsync(TryParseNullable(e.Value?.ToString()))"
-                       disabled="@Disabled" />
+                       disabled="@Disabled" readonly="@HasExtendedData"
+                       title="@(HasExtendedData ? "Calculated from extended scoring" : null)" />
             </div>
             <div class="mb-1">
                 <label class="form-label small mb-0">Secondary <span class="text-muted">(0–45)</span></label>
@@ -24,7 +25,8 @@
                        min="0" max="45" placeholder="0"
                        value="@P1Secondary"
                        @oninput="e => P1SecondaryChanged.InvokeAsync(TryParseNullable(e.Value?.ToString()))"
-                       disabled="@Disabled" />
+                       disabled="@Disabled" readonly="@HasExtendedData"
+                       title="@(HasExtendedData ? "Calculated from extended scoring" : null)" />
             </div>
             <div class="form-check mt-1">
                 <input class="form-check-input" type="checkbox" id="p1br-@_id"
@@ -54,7 +56,8 @@
                        min="0" max="45" placeholder="0"
                        value="@P2Primary"
                        @oninput="e => P2PrimaryChanged.InvokeAsync(TryParseNullable(e.Value?.ToString()))"
-                       disabled="@Disabled" />
+                       disabled="@Disabled" readonly="@HasExtendedData"
+                       title="@(HasExtendedData ? "Calculated from extended scoring" : null)" />
             </div>
             <div class="mb-1">
                 <label class="form-label small mb-0">Secondary <span class="text-muted">(0–45)</span></label>
@@ -62,7 +65,8 @@
                        min="0" max="45" placeholder="0"
                        value="@P2Secondary"
                        @oninput="e => P2SecondaryChanged.InvokeAsync(TryParseNullable(e.Value?.ToString()))"
-                       disabled="@Disabled" />
+                       disabled="@Disabled" readonly="@HasExtendedData"
+                       title="@(HasExtendedData ? "Calculated from extended scoring" : null)" />
             </div>
             <div class="form-check mt-1">
                 <input class="form-check-input" type="checkbox" id="p2br-@_id"
@@ -220,9 +224,20 @@
             ? new TurnScore(old.Turn, val, old.Secondary)
             : new TurnScore(old.Turn, old.Primary, val);
 
-        var cb = isP1 ? P1TurnScoresChanged : P2TurnScoresChanged;
-        _ = cb.InvokeAsync(list);
+        // Propagate full turn-scores list to parent
+        _ = (isP1 ? P1TurnScoresChanged : P2TurnScoresChanged).InvokeAsync(list);
+
+        // Also push the new aggregate total into the top-level primary/secondary
+        // fields so they stay in sync with the per-turn breakdown.
+        if (isPrimary)
+            _ = (isP1 ? P1PrimaryChanged : P2PrimaryChanged).InvokeAsync(TurnSum(list, true));
+        else
+            _ = (isP1 ? P1SecondaryChanged : P2SecondaryChanged).InvokeAsync(TurnSum(list, false));
     }
+
+    private bool HasExtendedData =>
+        _p1Turns.Any(t => t.Primary.HasValue || t.Secondary.HasValue) ||
+        _p2Turns.Any(t => t.Primary.HasValue || t.Secondary.HasValue);
 
     private static int? TurnSum(List<TurnScore> turns, bool isPrimary) =>
         turns.Any(t => isPrimary ? t.Primary.HasValue : t.Secondary.HasValue)

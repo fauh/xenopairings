@@ -70,12 +70,17 @@ else
         <div class="table-responsive">
             <table class="table table-sm">
                 <thead>
-                    <tr><th>Player</th><th class="text-end">ELO</th></tr>
+                    <tr>
+                        <th>Player</th>
+                        <th class="text-end">ELO</th>
+                        @if (_isOwner) { <th></th> }
+                    </tr>
                 </thead>
                 <tbody>
                     @foreach (var member in _org.Members.OrderBy(m => m.User.Email))
                     {
                         var rating = _ratings.GetValueOrDefault(member.User.Email);
+                        var isThisOwner = member.UserId == _org.CreatedByUserId;
                         <tr>
                             <td>
                                 @if (rating is not null && rating.IsProfilePublic)
@@ -87,14 +92,38 @@ else
                                     <span>@(rating?.DisplayName ?? member.User.Email)</span>
                                 }
                                 @if (rating?.IsVip == true) { <span class="badge text-bg-success ms-1 small">$</span> }
-                                @if (member.UserId == _org.CreatedByUserId)
+                                @if (isThisOwner)
                                 {
-                                    <span class="badge text-bg-secondary ms-1 small">founder</span>
+                                    <span class="badge text-bg-secondary ms-1 small">owner</span>
                                 }
                             </td>
                             <td class="text-end text-muted">
                                 @(rating is not null ? ((int)Math.Round(rating.Rating)).ToString() : "—")
                             </td>
+                            @if (_isOwner)
+                            {
+                                <td class="text-end">
+                                    @if (!isThisOwner)
+                                    {
+                                        @if (_confirmTransferTo == member.UserId)
+                                        {
+                                            <span class="text-danger small me-1">Transfer ownership?</span>
+                                            <button class="btn btn-sm btn-danger me-1"
+                                                    @onclick="() => TransferOwnership(member.UserId)"
+                                                    disabled="@_saving">Yes</button>
+                                            <button class="btn btn-sm btn-outline-secondary"
+                                                    @onclick="() => _confirmTransferTo = null">Cancel</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary"
+                                                    @onclick="() => _confirmTransferTo = member.UserId">
+                                                Make owner
+                                            </button>
+                                        }
+                                    }
+                                </td>
+                            }
                         </tr>
                     }
                 </tbody>
@@ -112,9 +141,11 @@ else
     private bool _loading = true;
     private bool _saving;
     private bool _isMember;
+    private bool _isOwner;
     private Guid? _userId;
     private Dictionary<string, PlayerRating> _ratings = [];
     private bool _copied;
+    private Guid? _confirmTransferTo;
 
     protected override async Task OnInitializedAsync()
     {
@@ -130,6 +161,7 @@ else
         if (_org is not null)
         {
             _isMember = _userId.HasValue && _org.Members.Any(m => m.UserId == _userId.Value);
+            _isOwner  = _userId.HasValue && _org.CreatedByUserId == _userId.Value;
 
             var leaderboard = await EloService.GetLeaderboardAsync();
             _ratings = leaderboard.ToDictionary(r => r.Email, StringComparer.OrdinalIgnoreCase);
@@ -143,6 +175,20 @@ else
         _saving = true;
         await OrgService.LeaveAsync(_org.Id, _userId.Value);
         Nav.NavigateTo("/organizations");
+    }
+
+    private async Task TransferOwnership(Guid newOwnerUserId)
+    {
+        if (_org is null || _userId is null || !_isOwner) return;
+        _saving = true;
+        try
+        {
+            await OrgService.TransferOwnershipAsync(_org.Id, newOwnerUserId);
+            _org = await OrgService.GetByIdAsync(_org.Id);
+            _isOwner = _userId.HasValue && _org?.CreatedByUserId == _userId.Value;
+            _confirmTransferTo = null;
+        }
+        finally { _saving = false; }
     }
 
     private async Task CopyInviteCode()

@@ -13,6 +13,11 @@ public interface IOrganizationService
     Task JoinAsync(Guid organizationId, Guid userId);
     Task LeaveAsync(Guid organizationId, Guid userId);
     Task DeleteAsync(Guid organizationId);
+    /// <summary>
+    /// Transfers ownership to an existing member.
+    /// Throws <see cref="InvalidOperationException"/> if the new owner is not a member.
+    /// </summary>
+    Task TransferOwnershipAsync(Guid organizationId, Guid newOwnerUserId);
     /// <summary>Returns all organizations (admin use). Includes Members.</summary>
     Task<IReadOnlyList<Organization>> ListAllAsync();
 }

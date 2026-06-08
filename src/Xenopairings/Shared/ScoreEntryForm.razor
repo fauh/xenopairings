@@ -202,11 +202,19 @@
             _p2Turns = P2TurnScores.ToList();
     }
 
+    private const int TurnPrimaryMax   = 15;
+    private const int TurnSecondaryMax = 15;
+
     private void UpdateTurn(bool isP1, int idx, bool isPrimary, string? raw)
     {
         var list = isP1 ? _p1Turns : _p2Turns;
         if (idx < 0 || idx >= list.Count) return;
-        var val = int.TryParse(raw, out var n) ? (int?)n : null;
+        int? val = null;
+        if (int.TryParse(raw, out var n))
+        {
+            var max = isPrimary ? TurnPrimaryMax : TurnSecondaryMax;
+            val = Math.Clamp(n, 0, max);
+        }
         var old = list[idx];
         list[idx] = isPrimary
             ? new TurnScore(old.Turn, val, old.Secondary)

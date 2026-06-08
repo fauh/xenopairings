@@ -565,10 +565,16 @@ public sealed class RoundService(
         IReadOnlyList<TurnScore> p1Turns,
         IReadOnlyList<TurnScore> p2Turns)
     {
+        // Clamp values server-side so invalid data can never reach the DB
+        static TurnScore Clamp(TurnScore t) => new(
+            t.Turn,
+            t.Primary   is null ? null : Math.Clamp(t.Primary.Value,   0, 15),
+            t.Secondary is null ? null : Math.Clamp(t.Secondary.Value, 0, 15));
+
         var match = await db.Matches.FindAsync(matchId)
             ?? throw new InvalidOperationException("Match not found.");
-        match.Player1TurnScoresJson = ScoreCalculator.SerializeTurnScores(p1Turns);
-        match.Player2TurnScoresJson = ScoreCalculator.SerializeTurnScores(p2Turns);
+        match.Player1TurnScoresJson = ScoreCalculator.SerializeTurnScores(p1Turns.Select(Clamp));
+        match.Player2TurnScoresJson = ScoreCalculator.SerializeTurnScores(p2Turns.Select(Clamp));
         await db.SaveChangesAsync();
     }
 

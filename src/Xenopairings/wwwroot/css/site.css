@@ -283,6 +283,69 @@ a:hover, .btn-link:hover {
     color: var(--color-error-text);
 }
 
+/* ── Bootstrap 5.1 dark-mode overrides ─────────────────────────────────────
+   Bootstrap 5.1 compiles all colours from Sass (e.g. #212529, #fff) and
+   doesn't use CSS custom properties internally. Any component we haven't
+   explicitly restyled will render Bootstrap's light-mode values regardless
+   of the [data-theme="dark"] flag. The rules below patch the most common
+   components used in this app.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Alert variants not covered above */
+[data-theme="dark"] .alert-success {
+    background-color: #0d2b14;
+    border-color: #1a5c2a;
+    color: #86efac;
+}
+[data-theme="dark"] .alert-info {
+    background-color: #0b1f2d;
+    border-color: #1a4a5c;
+    color: #7dd3fc;
+}
+[data-theme="dark"] .alert-primary {
+    background-color: #1f0a0a;
+    border-color: var(--color-crimson);
+    color: var(--color-gold-light);
+}
+[data-theme="dark"] .alert-secondary {
+    background-color: var(--color-surface);
+    border-color: var(--color-border);
+    color: var(--color-text-muted);
+}
+/* Bootstrap compiles alert links to inherit from the alert text colour */
+[data-theme="dark"] .alert .alert-link { color: inherit; filter: brightness(1.2); }
+
+/* List groups */
+[data-theme="dark"] .list-group-item {
+    background-color: var(--color-surface);
+    border-color: var(--color-border);
+    color: var(--color-text);
+}
+[data-theme="dark"] .list-group-item:hover,
+[data-theme="dark"] .list-group-item:focus {
+    background-color: color-mix(in srgb, var(--color-surface) 80%, var(--color-border) 20%);
+    color: var(--color-text);
+}
+
+/* Bootstrap text-colour utilities that hardcode dark values */
+[data-theme="dark"] .text-body          { color: var(--color-text)       !important; }
+[data-theme="dark"] .text-body-secondary { color: var(--color-text-muted) !important; }
+[data-theme="dark"] .text-dark          { color: var(--color-text)        !important; }
+[data-theme="dark"] .text-black         { color: var(--color-text)        !important; }
+
+/* Bootstrap background utilities that hardcode light values */
+[data-theme="dark"] .bg-white,
+[data-theme="dark"] .bg-light {
+    background-color: var(--color-surface) !important;
+    color: var(--color-text) !important;
+}
+
+/* Breadcrumbs — Bootstrap 5.1 sets color on .breadcrumb-item.active to #6c757d
+   which is readable in light mode but too dark against our dark surface */
+[data-theme="dark"] .breadcrumb-item { color: var(--color-text-muted); }
+[data-theme="dark"] .breadcrumb-item.active { color: var(--color-text-muted); }
+[data-theme="dark"] .breadcrumb-item + .breadcrumb-item::before { color: var(--color-text-muted); }
+
 /* ── Top navigation ── */
 .app-topnav {
     background-color: var(--color-nav-bg);

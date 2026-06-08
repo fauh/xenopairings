@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,6 +9,17 @@
     <link href="Xenopairings.styles.css" rel="stylesheet" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <HeadOutlet @rendermode="@RenderMode.InteractiveServer" />
+    <script>
+        // Apply saved theme before first paint to prevent flash.
+        // Default is dark — only switch to light if the user has explicitly chosen it.
+        (function () {
+            try {
+                var saved = localStorage.getItem('xp-theme');
+                var theme = saved ? saved : 'dark';
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
 </head>
 <body>
     <Routes @rendermode="@RenderMode.InteractiveServer" />

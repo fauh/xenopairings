@@ -64,7 +64,7 @@
     [Inject] private Xenopairings.Services.Auth.IAuthService AuthService { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
 
-    private bool _isDark;
+    private bool _isDark = true;  // default: dark
     private bool _navOpen;
     private bool _showVerifyBanner;
     private bool _resendBusy;
@@ -81,13 +81,33 @@
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        // Read saved preference — default to dark if nothing stored
+        try
+        {
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", "xp-theme");
+            _isDark = saved is null ? true : saved == "dark";
+            // Ensure the DOM attribute matches (in case SSR set the wrong default)
+            await JS.InvokeVoidAsync(
+                "document.documentElement.setAttribute",
+                "data-theme", _isDark ? "dark" : "light");
+            StateHasChanged();
+        }
+        catch { /* localStorage unavailable (SSR pass) */ }
+    }
+
     private void ToggleNav() => _navOpen = !_navOpen;
     private void CloseNav()  => _navOpen = false;
 
     private async Task ToggleTheme()
     {
         _isDark = !_isDark;
-        await JS.InvokeVoidAsync("document.documentElement.setAttribute", "data-theme", _isDark ? "dark" : "light");
+        var theme = _isDark ? "dark" : "light";
+        await JS.InvokeVoidAsync("document.documentElement.setAttribute", "data-theme", theme);
+        try { await JS.InvokeVoidAsync("localStorage.setItem", "xp-theme", theme); }
+        catch { }
     }
 
     private async Task ResendVerification()

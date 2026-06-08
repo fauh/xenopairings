@@ -26,21 +26,56 @@ using Xenopairings.Services.Tournaments;
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Database — PostgreSQL ─────────────────────────────────────────────────────
-// Railway sets individual PG* variables when a PostgreSQL service is linked.
-// Build a plain Npgsql key=value connection string from them — avoids all URI
-// parsing issues. Falls back to appsettings.json for local development.
-var pgHost = Environment.GetEnvironmentVariable("PGHOST");
-if (!string.IsNullOrWhiteSpace(pgHost))
+// Railway injects DATABASE_URL as postgresql://user:pass@host:port/db.
+// .NET's Uri class doesn't handle the postgresql:// scheme, so we swap it
+// for https:// purely for parsing, then build a clean Npgsql key=value string.
+// Falls back to individual PG* vars, then appsettings.json (local dev).
+var rawDbUrl = Environment.GetEnvironmentVariable("DATABASE_URL")
+            ?? Environment.GetEnvironmentVariable("POSTGRES_URL");
+
+if (!string.IsNullOrWhiteSpace(rawDbUrl))
 {
-    var connStr = new System.Text.StringBuilder()
-        .Append("Host=").Append(pgHost).Append(';')
-        .Append("Port=").Append(Environment.GetEnvironmentVariable("PGPORT") ?? "5432").Append(';')
-        .Append("Database=").Append(Environment.GetEnvironmentVariable("PGDATABASE")).Append(';')
-        .Append("Username=").Append(Environment.GetEnvironmentVariable("PGUSER")).Append(';')
-        .Append("Password=").Append(Environment.GetEnvironmentVariable("PGPASSWORD")).Append(';')
-        .Append("SSL Mode=Require;Trust Server Certificate=true")
-        .ToString();
-    builder.Configuration["ConnectionStrings:DefaultConnection"] = connStr;
+    try
+    {
+        var parseableUrl = rawDbUrl
+            .Replace("postgresql://", "https://", StringComparison.OrdinalIgnoreCase)
+            .Replace("postgres://", "https://", StringComparison.OrdinalIgnoreCase);
+        // Strip any existing query string — we set SSL options explicitly below
+        var qIndex = parseableUrl.IndexOf('?');
+        if (qIndex >= 0) parseableUrl = parseableUrl[..qIndex];
+
+        var uri = new Uri(parseableUrl);
+        var parts = uri.UserInfo.Split(':', 2);
+
+        var connStr = $"Host={uri.Host};" +
+                      $"Port={(uri.Port > 0 ? uri.Port : 5432)};" +
+                      $"Database={uri.AbsolutePath.TrimStart('/')};" +
+                      $"Username={Uri.UnescapeDataString(parts[0])};" +
+                      $"Password={Uri.UnescapeDataString(parts.Length > 1 ? parts[1] : "")};" +
+                      "SSL Mode=Require;Trust Server Certificate=true";
+
+        builder.Configuration["ConnectionStrings:DefaultConnection"] = connStr;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"[DB] Failed to parse DATABASE_URL: {ex.Message}");
+        // Fall through to appsettings default
+    }
+}
+else
+{
+    // Individual PG* vars (Railway also sets these if linked explicitly)
+    var pgHost = Environment.GetEnvironmentVariable("PGHOST");
+    if (!string.IsNullOrWhiteSpace(pgHost))
+    {
+        var connStr = $"Host={pgHost};" +
+                      $"Port={Environment.GetEnvironmentVariable("PGPORT") ?? "5432"};" +
+                      $"Database={Environment.GetEnvironmentVariable("PGDATABASE")};" +
+                      $"Username={Environment.GetEnvironmentVariable("PGUSER")};" +
+                      $"Password={Environment.GetEnvironmentVariable("PGPASSWORD")};" +
+                      "SSL Mode=Require;Trust Server Certificate=true";
+        builder.Configuration["ConnectionStrings:DefaultConnection"] = connStr;
+    }
 }
 
 // ── Forwarded headers ─────────────────────────────────────────────────────────

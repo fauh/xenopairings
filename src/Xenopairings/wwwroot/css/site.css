@@ -203,6 +203,44 @@ a:hover, .btn-link:hover {
     --bs-table-color: var(--color-text);
     --bs-table-border-color: var(--color-border);
 }
+/* thead headers: dark background with gold-light text so they're always readable.
+   Bootstrap's default thead applies a subtle darker shade that becomes invisible
+   against our dark surface in dark mode. */
+.table thead th,
+.table thead td {
+    background-color: var(--color-dark-grey) !important;
+    color: var(--color-gold-light) !important;
+    border-bottom-color: var(--color-gold) !important;
+    font-weight: 600;
+}
+/* Light mode override — use a warm dark grey that still reads well */
+:root .table thead th,
+:root .table thead td {
+    background-color: #2d2010 !important;
+    color: var(--color-gold-light) !important;
+}
+
+/* ── Report flag button ── */
+.report-flag {
+    font-size: 0.65rem;
+    opacity: 0.25;
+    vertical-align: middle;
+    color: inherit !important;
+    text-decoration: none !important;
+    transition: opacity 0.15s;
+}
+.report-flag:hover { opacity: 0.9; }
+
+/* ── Form control: readonly inputs ── */
+/* Bootstrap applies a slightly different bg to readonly inputs that doesn't
+   inherit our dark surface colour properly in dark mode. */
+.form-control[readonly],
+.form-select[readonly] {
+    background-color: var(--color-surface);
+    color: var(--color-text-muted);
+    border-color: var(--color-border);
+    opacity: 1;
+}
 
 /* ── Alerts ── */
 .alert-warning {

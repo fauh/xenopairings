@@ -91,4 +91,18 @@ public sealed class OrganizationService(AppDbContext db, TokenGenerator tokenGen
         db.OrganizationMembers.Remove(member);
         await db.SaveChangesAsync();
     }
+
+    public async Task TransferOwnershipAsync(Guid organizationId, Guid newOwnerUserId)
+    {
+        var org = await db.Organizations.FindAsync(organizationId)
+            ?? throw new InvalidOperationException("Organization not found.");
+
+        var isMember = await db.OrganizationMembers
+            .AnyAsync(m => m.OrganizationId == organizationId && m.UserId == newOwnerUserId);
+        if (!isMember)
+            throw new InvalidOperationException("The new owner must already be a member of the organization.");
+
+        org.CreatedByUserId = newOwnerUserId;
+        await db.SaveChangesAsync();
+    }
 }

@@ -26,17 +26,32 @@ using Xenopairings.Services.Tournaments;
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Database — PostgreSQL ─────────────────────────────────────────────────────
-// Railway injects DATABASE_URL as a postgres:// URI.
-// Locally, set ConnectionStrings:DefaultConnection in appsettings.json.
+// Priority:
+//   1. DATABASE_URL  — Railway injects this when a PostgreSQL service is linked.
+//                      Npgsql 7+ accepts postgres:// URIs directly.
+//   2. PGHOST etc.   — Railway also sets individual PG* vars; use as fallback.
+//   3. appsettings   — local development default (localhost).
 var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+var pgHost      = Environment.GetEnvironmentVariable("PGHOST");
+
 if (!string.IsNullOrWhiteSpace(databaseUrl))
 {
-    // Convert postgres:// URI → Npgsql connection string
-    var uri = new Uri(databaseUrl);
-    var userInfo = uri.UserInfo.Split(':');
-    var npgsql = $"Host={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')}" +
-                 $";Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
-    builder.Configuration["ConnectionStrings:DefaultConnection"] = npgsql;
+    // Pass the URI straight to Npgsql — no manual parsing needed.
+    // Append SSL options via query string if not already present.
+    if (!databaseUrl.Contains("sslmode", StringComparison.OrdinalIgnoreCase))
+        databaseUrl += (databaseUrl.Contains('?') ? "&" : "?") + "sslmode=require&Trust%20Server%20Certificate=true";
+    builder.Configuration["ConnectionStrings:DefaultConnection"] = databaseUrl;
+}
+else if (!string.IsNullOrWhiteSpace(pgHost))
+{
+    // Fallback: build from individual Railway PG* environment variables.
+    var connStr = $"Host={pgHost};" +
+                  $"Port={Environment.GetEnvironmentVariable("PGPORT") ?? "5432"};" +
+                  $"Database={Environment.GetEnvironmentVariable("PGDATABASE")};" +
+                  $"Username={Environment.GetEnvironmentVariable("PGUSER")};" +
+                  $"Password={Environment.GetEnvironmentVariable("PGPASSWORD")};" +
+                  "SSL Mode=Require;Trust Server Certificate=true";
+    builder.Configuration["ConnectionStrings:DefaultConnection"] = connStr;
 }
 
 // ── Forwarded headers ─────────────────────────────────────────────────────────

@@ -65,4 +65,6 @@ public class Tournament
 
     /// <summary>When true, only checked-in players are included in round-1 pairings.</summary>
     public bool CheckInEnabled { get; set; }
+    /// <summary>When true, the tournament is hidden from the public browse page and excluded from ELO calculations.</summary>
+    public bool IsTestEvent { get; set; }
 }

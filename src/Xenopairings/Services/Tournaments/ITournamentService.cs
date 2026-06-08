@@ -11,6 +11,7 @@ public interface ITournamentService
     Task SetRegistrationOpenAsync(Guid tournamentId, bool open);
     Task SetArmyListLockedAsync(Guid tournamentId, bool locked);
     Task SetCheckInEnabledAsync(Guid tournamentId, bool enabled);
+    Task SetTestEventAsync(Guid tournamentId, bool isTest);
     /// <summary>Transitions Upcoming → InProgress; auto-closes registration.</summary>
     Task StartAsync(Guid tournamentId);
     /// <summary>Transitions any non-Ended status → Ended; auto-closes registration.</summary>

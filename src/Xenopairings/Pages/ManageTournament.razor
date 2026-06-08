@@ -67,6 +67,13 @@ else
                 </button>
             }
 
+            @* Test event toggle — always available *@
+            <button class="btn btn-sm me-2 @(_tournament.IsTestEvent ? "btn-warning" : "btn-outline-secondary")"
+                    @onclick="ToggleTestEvent" disabled="@_saving"
+                    title="@(_tournament.IsTestEvent ? "Hidden from public browse page, excluded from ELO" : "Mark as test event to hide from browse page")">
+                @(_tournament.IsTestEvent ? "🧪 Test event" : "Mark as test")
+            </button>
+
             @* Army list lock — available when event is not Ended *@
             @if (_tournament.Status != TournamentStatus.Ended)
             {
@@ -878,6 +885,20 @@ else
         }
         catch (Exception ex) { _errorMessage = ex.Message; }
         finally { _saving = false; }
+    }
+
+    private async Task ToggleTestEvent()
+    {
+        if (_tournament is null) return;
+        _saving = true;
+        _errorMessage = null;
+        var newValue = !_tournament.IsTestEvent;
+        await TournamentService.SetTestEventAsync(_tournament.Id, newValue);
+        _tournament.IsTestEvent = newValue;
+        _statusMessage = newValue
+            ? "Marked as test event — hidden from public browse page."
+            : "Test event flag removed — now visible on browse page.";
+        _saving = false;
     }
 
     private async Task ToggleArmyListLock()

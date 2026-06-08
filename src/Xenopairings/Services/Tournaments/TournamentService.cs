@@ -110,7 +110,7 @@ public class TournamentService(
         // DateTimeOffset cannot be used in ORDER BY by EF Core's SQLite provider —
         // fetch unordered then sort in memory (same pattern as PlayerService).
         var tournaments = await db.Tournaments
-            .Where(t => !t.IsPrivate && !t.IsTestEvent)
+            .Where(t => !t.IsPrivate)
             .ToListAsync();
         return [.. tournaments.OrderByDescending(t => t.StartsAt)];
     }

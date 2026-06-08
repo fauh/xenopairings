@@ -37,7 +37,10 @@ else
                     @foreach (var row in _ongoing)
                     {
                         <tr>
-                            <td><a href="/t/@row.Tournament.Slug">@row.Tournament.Title</a></td>
+                            <td>
+                                <a href="/t/@row.Tournament.Slug">@row.Tournament.Title</a>
+                                @if (row.Tournament.IsTestEvent) { <span class="badge text-bg-warning ms-1 small">🧪 Test</span> }
+                            </td>
                             <td class="text-nowrap">@row.Tournament.StartsAt.ToLocalTime().ToString("d MMM yyyy")</td>
                             <td>@row.Tournament.NumberOfRounds</td>
                             <td>@row.PlayerCount / @row.Tournament.MaxPlayers</td>
@@ -104,7 +107,10 @@ else
                         @foreach (var row in _past)
                         {
                             <tr>
-                                <td><a href="/t/@row.Tournament.Slug">@row.Tournament.Title</a></td>
+                                <td>
+                                    <a href="/t/@row.Tournament.Slug">@row.Tournament.Title</a>
+                                    @if (row.Tournament.IsTestEvent) { <span class="badge text-bg-warning ms-1 small">🧪 Test</span> }
+                                </td>
                                 <td class="text-nowrap">@row.Tournament.StartsAt.ToLocalTime().ToString("d MMM yyyy")</td>
                                 <td>@row.Tournament.NumberOfRounds</td>
                                 <td>@row.PlayerCount / @row.Tournament.MaxPlayers</td>

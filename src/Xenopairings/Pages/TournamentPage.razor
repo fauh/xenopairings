@@ -392,80 +392,21 @@ else
                    class="btn btn-outline-secondary btn-sm ms-auto">View →</a>
             </h2>
 
-            @* Submit form — unscored match in the current round *@
-            @if (!_currentRound.IsComplete && myMatch is not null && !myMatch.IsScored && myMatch.Player2Id is not null)
+            @* Score submission lives on the round page (View →) *@
+            @if (myMatch is not null)
             {
-                var opponent = myMatch.Player1Id == _myPlayerId ? myMatch.Player2 : myMatch.Player1;
-                <div class="card mb-3 border-primary" style="max-width:480px">
-                    <div class="card-body">
-                        <h3 class="h6 card-title">Submit your result — Table @myMatch.TableNumber</h3>
-                        <p class="text-muted small mb-3">vs <strong>@(opponent?.Name ?? "opponent")</strong></p>
-
-                        <div class="row g-2 mb-3">
-                            <div class="col">
-                                <label class="form-label small">Your score</label>
-                                <input type="number" class="form-control form-control-sm" min="0"
-                                       @bind="_submitMyScore" placeholder="0" />
-                            </div>
-                            <div class="col">
-                                <label class="form-label small">Opponent score</label>
-                                <input type="number" class="form-control form-control-sm" min="0"
-                                       @bind="_submitOpponentScore" placeholder="0" />
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small">First turn</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="ft"
-                                       id="ft-me" @onchange="() => _submitIWentFirst = true"
-                                       checked="@(_submitIWentFirst == true)" />
-                                <label class="form-check-label small" for="ft-me">I went first</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="ft"
-                                       id="ft-them" @onchange="() => _submitIWentFirst = false"
-                                       checked="@(_submitIWentFirst == false)" />
-                                <label class="form-check-label small" for="ft-them">Opponent went first</label>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small">Role</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="role"
-                                       id="role-atk" @onchange="() => _submitIWasAttacker = true"
-                                       checked="@(_submitIWasAttacker == true)" />
-                                <label class="form-check-label small" for="role-atk">Attacker</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="role"
-                                       id="role-def" @onchange="() => _submitIWasAttacker = false"
-                                       checked="@(_submitIWasAttacker == false)" />
-                                <label class="form-check-label small" for="role-def">Defender</label>
-                            </div>
-                        </div>
-                        @if (!string.IsNullOrEmpty(_submitError))
-                        {
-                            <div class="alert alert-danger py-2 small">@_submitError</div>
-                        }
-                        @if (_submitSuccess)
-                        {
-                            <div class="alert alert-success py-2 small">Result submitted!</div>
-                        }
-                        <button class="btn btn-primary btn-sm" @onclick="SubmitMatchResult"
-                                disabled="@(_submitMyScore is null || _submitOpponentScore is null
-                                            || _submitIWentFirst is null || _submitIWasAttacker is null
-                                            || _submitBusy)">
-                            Submit result
-                        </button>
-                    </div>
-                </div>
-            }
-            else if (myMatch is not null && myMatch.IsScored)
-            {
-                var myScore  = myMatch.Player1Id == _myPlayerId ? myMatch.Player1Score : myMatch.Player2Score;
-                var oppScore = myMatch.Player1Id == _myPlayerId ? myMatch.Player2Score : myMatch.Player1Score;
-                <div class="alert alert-success mb-3 py-2 small">
-                    <strong>Your result:</strong> @myScore — @oppScore
+                <div class="alert alert-info py-2 small mb-3">
+                    @if (myMatch.IsScored)
+                    {
+                        var myScore  = myMatch.Player1Id == _myPlayerId ? myMatch.Player1Score : myMatch.Player2Score;
+                        var oppScore = myMatch.Player1Id == _myPlayerId ? myMatch.Player2Score : myMatch.Player1Score;
+                        <span>✓ Result submitted: <strong>@myScore — @oppScore</strong></span>
+                    }
+                    else
+                    {
+                        var opponent = myMatch.Player1Id == _myPlayerId ? myMatch.Player2 : myMatch.Player1;
+                        <span>Table @myMatch.TableNumber · vs <strong>@(opponent?.Name ?? "opponent")</strong> — <a href="/t/@_tournament!.Slug/round/@_currentRound.RoundNumber">Submit your result →</a></span>
+                    }
                 </div>
             }
 

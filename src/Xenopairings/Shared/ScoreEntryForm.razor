@@ -15,7 +15,7 @@
                 <input type="number" class="form-control form-control-sm"
                        min="0" max="45" placeholder="0"
                        value="@P1Primary"
-                       @oninput="e => P1PrimaryChanged.InvokeAsync(TryParseNullable(e.Value?.ToString()))"
+                       @oninput="e => P1PrimaryChanged.InvokeAsync(ParseClamped(e.Value?.ToString(), 0, 45))"
                        disabled="@Disabled" />
             </div>
             <div class="mb-1">
@@ -23,7 +23,7 @@
                 <input type="number" class="form-control form-control-sm"
                        min="0" max="45" placeholder="0"
                        value="@P1Secondary"
-                       @oninput="e => P1SecondaryChanged.InvokeAsync(TryParseNullable(e.Value?.ToString()))"
+                       @oninput="e => P1SecondaryChanged.InvokeAsync(ParseClamped(e.Value?.ToString(), 0, 45))"
                        disabled="@Disabled" />
             </div>
             <div class="form-check mt-1">
@@ -53,7 +53,7 @@
                 <input type="number" class="form-control form-control-sm"
                        min="0" max="45" placeholder="0"
                        value="@P2Primary"
-                       @oninput="e => P2PrimaryChanged.InvokeAsync(TryParseNullable(e.Value?.ToString()))"
+                       @oninput="e => P2PrimaryChanged.InvokeAsync(ParseClamped(e.Value?.ToString(), 0, 45))"
                        disabled="@Disabled" />
             </div>
             <div class="mb-1">
@@ -61,7 +61,7 @@
                 <input type="number" class="form-control form-control-sm"
                        min="0" max="45" placeholder="0"
                        value="@P2Secondary"
-                       @oninput="e => P2SecondaryChanged.InvokeAsync(TryParseNullable(e.Value?.ToString()))"
+                       @oninput="e => P2SecondaryChanged.InvokeAsync(ParseClamped(e.Value?.ToString(), 0, 45))"
                        disabled="@Disabled" />
             </div>
             <div class="form-check mt-1">
@@ -231,4 +231,11 @@
 
     private static int? TryParseNullable(string? s) =>
         int.TryParse(s, out var n) ? n : null;
+
+    /// <summary>
+    /// Parse and hard-clamp to [min, max]. The HTML max attribute only
+    /// blocks the spinner arrows — typed values bypass it entirely.
+    /// </summary>
+    private static int? ParseClamped(string? s, int min, int max) =>
+        int.TryParse(s, out var n) ? Math.Clamp(n, min, max) : null;
 }

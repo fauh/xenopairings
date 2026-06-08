@@ -29,9 +29,16 @@ public sealed class SmtpEmailSender(
         message.Body = new TextPart("plain") { Text = body };
 
         using var client = new SmtpClient();
+        // 15 second connect timeout — fail fast rather than hanging indefinitely
+        client.Timeout = 15_000;
         try
         {
-            await client.ConnectAsync(cfg.SmtpHost, cfg.SmtpPort, SecureSocketOptions.StartTls);
+            // Port 465 → implicit SSL; anything else → STARTTLS
+            var socketOptions = cfg.SmtpPort == 465
+                ? SecureSocketOptions.SslOnConnect
+                : SecureSocketOptions.StartTls;
+
+            await client.ConnectAsync(cfg.SmtpHost, cfg.SmtpPort, socketOptions);
             await client.AuthenticateAsync(cfg.SmtpUsername, cfg.SmtpPassword);
             await client.SendAsync(message);
             await client.DisconnectAsync(true);
@@ -39,7 +46,8 @@ public sealed class SmtpEmailSender(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "SMTP send failed to {To}: {Subject}", to, subject);
+            logger.LogError(ex, "SMTP send failed ({Host}:{Port}) to {To}: {Subject}",
+                cfg.SmtpHost, cfg.SmtpPort, to, subject);
             throw;
         }
     }

@@ -3,9 +3,11 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Xenopairings.Models
 @using Xenopairings.Services.Auth
+@using Xenopairings.Services.Elo
 @using Xenopairings.Services.Organizations
 @inject IOrganizationService OrgService
 @inject IAuthService AuthService
+@inject IEloService EloService
 @inject NavigationManager Nav
 
 <PageTitle>Organizations — Xenopairings</PageTitle>
@@ -14,82 +16,121 @@
 {
     <LoadingSpinner />
 }
-else if (_userId is null)
-{
-    <div class="alert alert-warning">
-        <a href="/login">Sign in</a> to create or join organizations.
-    </div>
-}
 else
 {
     <div class="d-flex align-items-center justify-content-between mb-3">
         <h1>Organizations</h1>
-        <button class="btn btn-primary btn-sm" @onclick="() => _showCreate = !_showCreate">
-            + Create organization
-        </button>
+        @if (_userId is not null)
+        {
+            <button class="btn btn-primary btn-sm" @onclick="() => _showCreate = !_showCreate">+ Create</button>
+        }
     </div>
 
-    @if (_showCreate)
+    @if (_userId is not null)
     {
+        @if (_showCreate)
+        {
+            <div class="card mb-4" style="max-width:480px">
+                <div class="card-body">
+                    <h2 class="h6 card-title">New organization</h2>
+                    <div class="mb-3">
+                        <input class="form-control" @bind="_newOrgName" placeholder="Organization name" maxlength="100" />
+                    </div>
+                    @if (!string.IsNullOrEmpty(_createError))
+                    {
+                        <div class="alert alert-danger py-2 small">@_createError</div>
+                    }
+                    <button class="btn btn-primary btn-sm me-2" @onclick="CreateOrg" disabled="@_saving">
+                        @(_saving ? "Creating…" : "Create")
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => _showCreate = false">Cancel</button>
+                </div>
+            </div>
+        }
+
         <div class="card mb-4" style="max-width:480px">
             <div class="card-body">
-                <h2 class="h6 card-title">New organization</h2>
-                <div class="mb-3">
-                    <input class="form-control" @bind="_newOrgName" placeholder="Organization name" maxlength="100" />
+                <h2 class="h6 card-title">Join with invite code</h2>
+                <div class="input-group">
+                    <input class="form-control" @bind="_joinCode" placeholder="Paste invite code" />
+                    <button class="btn btn-outline-primary" @onclick="JoinByCode" disabled="@_saving">
+                        @(_saving ? "Joining…" : "Join")
+                    </button>
                 </div>
-                @if (!string.IsNullOrEmpty(_createError))
+                @if (!string.IsNullOrEmpty(_joinError))
                 {
-                    <div class="alert alert-danger py-2 small">@_createError</div>
+                    <div class="alert alert-danger py-2 small mt-2">@_joinError</div>
                 }
-                <button class="btn btn-primary btn-sm me-2" @onclick="CreateOrg" disabled="@_saving">
-                    @(_saving ? "Creating…" : "Create")
-                </button>
-                <button class="btn btn-outline-secondary btn-sm" @onclick="() => _showCreate = false">Cancel</button>
+                @if (_joinSuccess)
+                {
+                    <div class="alert alert-success py-2 small mt-2">Joined!</div>
+                }
             </div>
         </div>
     }
+    else
+    {
+        <p class="text-muted small mb-4">
+            <a href="/login?returnUrl=/organizations">Sign in</a> to create or join an organization.
+        </p>
+    }
 
-    @* Join with invite code *@
-    <div class="card mb-4" style="max-width:480px">
-        <div class="card-body">
-            <h2 class="h6 card-title">Join with invite code</h2>
-            <div class="input-group">
-                <input class="form-control" @bind="_joinCode" placeholder="Paste invite code" />
-                <button class="btn btn-outline-primary" @onclick="JoinByCode" disabled="@_saving">
-                    @(_saving ? "Joining…" : "Join")
-                </button>
-            </div>
-            @if (!string.IsNullOrEmpty(_joinError))
-            {
-                <div class="alert alert-danger py-2 small mt-2">@_joinError</div>
-            }
-            @if (_joinSuccess)
-            {
-                <div class="alert alert-success py-2 small mt-2">Joined!</div>
-            }
-        </div>
-    </div>
-
-    @if (!_orgs.Any())
+    @* Public directory *@
+    @if (!_allOrgs.Any())
     {
         <div class="empty-state">
             <div class="empty-state-icon">🏰</div>
             <h3>No organizations yet</h3>
-            <p>Create one or join with an invite code.</p>
+            <p>Be the first to create one.</p>
         </div>
     }
     else
     {
         <div class="row g-3">
-            @foreach (var org in _orgs)
+            @foreach (var org in _allOrgs)
             {
+                var isMember = _myOrgIds.Contains(org.Id);
                 <div class="col-md-6">
                     <div class="card h-100">
                         <div class="card-body">
-                            <h5 class="card-title mb-1">
-                                <a href="/organizations/@org.Id">@org.Name</a>
-                            </h5>
-                            <p class="text-muted small mb-2">@org.Members.Count member@(org.Members.Count == 1 ? "" : "s")</p>
+                            <div class="d-flex align-items-start justify-content-between mb-1">
+                                <h5 class="card-title mb-0">
+                                    <a href="/organizations/@org.Id">@org.Name</a>
+                                </h5>
+                                @if (isMember)
+                                {
+                                    <span class="badge text-bg-success ms-2 flex-shrink-0">Member</span>
+                                }
+                            </div>
+                            <p class="text-muted small mb-2">
+                                @org.Members.Count member@(org.Members.Count == 1 ? "" : "s")
+                            </p>
+                            @if (org.Members.Any())
+                            {
+                                <ul class="list-unstyled mb-3">
+                                    @foreach (var m in org.Members.OrderBy(m => m.User.Email))
+                                    {
+                                        var displayName = _ratingByEmail.TryGetValue(m.User.Email, out var r)
+                                            ? r.DisplayName
+                                            : m.User.Email.Split('@')[0];
+                                        var isYou = m.User.Email.Equals(_myEmail, StringComparison.OrdinalIgnoreCase);
+                                        <li class="small d-flex align-items-center gap-1">
+                                            @if (_ratingByEmail.TryGetValue(m.User.Email, out var rating) && rating.IsProfilePublic)
+                                            {
+                                                <a href="/player/@rating.Id">@displayName</a>
+                                            }
+                                            else
+                                            {
+                                                <span>@displayName</span>
+                                            }
+                                            @if (isYou)
+                                            {
+                                                <span class="badge text-bg-primary fw-normal" style="font-size:0.65rem">you</span>
+                                            }
+                                        </li>
+                                    }
+                                </ul>
+                            }
                             <a href="/organizations/@org.Id" class="btn btn-sm btn-outline-secondary">View →</a>
                         </div>
                     </div>
@@ -102,7 +143,10 @@ else
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
-    private List<Organization> _orgs = [];
+    private List<Organization> _allOrgs = [];
+    private HashSet<Guid> _myOrgIds = [];
+    private Dictionary<string, PlayerRating> _ratingByEmail = [];
+    private string? _myEmail;
     private bool _loading = true;
     private bool _saving;
     private Guid? _userId;
@@ -118,28 +162,37 @@ else
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateTask;
-        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
-        if (email is not null)
+        _myEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+
+        if (_myEmail is not null)
         {
-            var user = await AuthService.GetByEmailAsync(email);
+            var user = await AuthService.GetByEmailAsync(_myEmail);
             _userId = user?.Id;
         }
+
+        _allOrgs = [.. (await OrgService.ListAllAsync()).OrderBy(o => o.Name)];
+
         if (_userId.HasValue)
-            _orgs = [.. await OrgService.ListByUserAsync(_userId.Value)];
+        {
+            var myOrgs = await OrgService.ListByUserAsync(_userId.Value);
+            _myOrgIds = myOrgs.Select(o => o.Id).ToHashSet();
+        }
+
+        var ratings = await EloService.GetLeaderboardAsync();
+        _ratingByEmail = ratings.ToDictionary(r => r.Email, StringComparer.OrdinalIgnoreCase);
+
         _loading = false;
     }
 
     private async Task CreateOrg()
     {
         if (_userId is null || string.IsNullOrWhiteSpace(_newOrgName)) return;
-        _saving = true;
-        _createError = null;
+        _saving = true; _createError = null;
         try
         {
-            var org = await OrgService.CreateAsync(_newOrgName!, _userId.Value);
-            _orgs = [.. await OrgService.ListByUserAsync(_userId.Value)];
-            _newOrgName = null;
-            _showCreate = false;
+            await OrgService.CreateAsync(_newOrgName!, _userId.Value);
+            await RefreshAsync();
+            _newOrgName = null; _showCreate = false;
         }
         catch (Exception ex) { _createError = ex.Message; }
         finally { _saving = false; }
@@ -148,19 +201,26 @@ else
     private async Task JoinByCode()
     {
         if (_userId is null || string.IsNullOrWhiteSpace(_joinCode)) return;
-        _saving = true;
-        _joinError = null;
-        _joinSuccess = false;
+        _saving = true; _joinError = null; _joinSuccess = false;
         try
         {
             var org = await OrgService.GetByInviteTokenAsync(_joinCode!.Trim());
             if (org is null) { _joinError = "Invalid invite code."; return; }
             await OrgService.JoinAsync(org.Id, _userId.Value);
-            _orgs = [.. await OrgService.ListByUserAsync(_userId.Value)];
-            _joinCode = null;
-            _joinSuccess = true;
+            await RefreshAsync();
+            _joinCode = null; _joinSuccess = true;
         }
         catch (Exception ex) { _joinError = ex.Message; }
         finally { _saving = false; }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _allOrgs = [.. (await OrgService.ListAllAsync()).OrderBy(o => o.Name)];
+        if (_userId.HasValue)
+        {
+            var myOrgs = await OrgService.ListByUserAsync(_userId.Value);
+            _myOrgIds = myOrgs.Select(o => o.Id).ToHashSet();
+        }
     }
 }

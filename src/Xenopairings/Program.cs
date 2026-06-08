@@ -128,6 +128,12 @@ var emailSettings = builder.Configuration.GetSection(EmailSettings.SectionName).
 // Set EmailSettings__Provider in Railway to activate real sending.
 switch (emailSettings.Provider.ToLowerInvariant())
 {
+    case "brevo":
+        if (string.IsNullOrWhiteSpace(emailSettings.ApiKey))
+            throw new InvalidOperationException(
+                "EmailSettings:ApiKey must be set when EmailSettings:Provider is 'brevo'.");
+        builder.Services.AddHttpClient<IEmailSender, BrevoEmailSender>();
+        break;
     case "smtp":
         if (string.IsNullOrWhiteSpace(emailSettings.SmtpHost))
             throw new InvalidOperationException(

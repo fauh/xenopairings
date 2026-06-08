@@ -21,6 +21,20 @@ public interface IEloService
     Task<PlayerRating?> GetByEmailAsync(string email);
 
     /// <summary>
+    /// Gets or creates a PlayerRating entry for the given email so the player appears
+    /// on the leaderboard even before playing their first match.
+    /// Called when a user verifies their email.
+    /// </summary>
+    Task EnsureRatingAsync(string email, string displayName);
+
+    /// <summary>
+    /// Updates the display name on an existing PlayerRating.
+    /// No-op if no rating exists for this email.
+    /// Called when a registered user registers for a tournament with a chosen name.
+    /// </summary>
+    Task UpdateDisplayNameAsync(string email, string displayName);
+
+    /// <summary>
     /// Returns the player's rating and full match history, ordered oldest-first.
     /// Returns null if the rating ID does not exist.
     /// </summary>

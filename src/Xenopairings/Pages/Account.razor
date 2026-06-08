@@ -35,9 +35,15 @@ else
                 <div class="card-body">
                     <h2 class="h6 card-title">Display name</h2>
                     <p class="text-muted small">Shown on the leaderboard and player profiles.</p>
+                    @if (!string.IsNullOrWhiteSpace(_displayName))
+                    {
+                        <p class="small mb-2">
+                            Current: <strong>@_displayName</strong>
+                        </p>
+                    }
                     <div class="input-group">
                         <input class="form-control" @bind="_displayName" maxlength="200"
-                               placeholder="Your display name" />
+                               placeholder="@(string.IsNullOrWhiteSpace(_displayName) ? "Not set — enter a name" : "New display name")" />
                         <button class="btn btn-outline-primary"
                                 @onclick="SaveDisplayName" disabled="@_saving">
                             @(_saving ? "Saving…" : "Save")
@@ -216,10 +222,14 @@ else
 
     private async Task SaveDisplayName()
     {
-        if (_userId is null || string.IsNullOrWhiteSpace(_displayName)) return;
+        if (_userId is null || string.IsNullOrWhiteSpace(_displayName) || _email is null) return;
         _saving = true;
         _displayNameMsg = null;
-        await AuthService.UpdateDisplayNameAsync(_userId.Value, _displayName);
+        // EnsureRatingAsync creates a PlayerRating if none exists yet;
+        // UpdateDisplayNameAsync updates the name on an existing one.
+        // Together they cover new and returning users alike.
+        await EloService.EnsureRatingAsync(_email, _displayName);
+        await EloService.UpdateDisplayNameAsync(_email, _displayName);
         _displayNameMsg = "Display name updated.";
         _displayNameSuccess = true;
         _saving = false;

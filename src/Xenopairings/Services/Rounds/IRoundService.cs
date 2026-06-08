@@ -25,6 +25,18 @@ public interface IRoundService
     Task SetSportsRatingAsync(Guid matchId, Guid submittingPlayerId, int rating);
 
     /// <summary>
+    /// Records scores using the standard breakdown (Primary + Secondary + Battle Ready).
+    /// Computes and stores the totals in Player1Score / Player2Score for use by standings and ELO.
+    /// Also stores the individual breakdown fields.
+    /// </summary>
+    Task EnterScoreBreakdownAsync(
+        Guid matchId,
+        int p1Primary, int p1Secondary, bool p1BattleReady,
+        int p2Primary, int p2Secondary, bool p2BattleReady,
+        bool? player1IsAttacker = null,
+        bool? player1WentFirst = null);
+
+    /// <summary>
     /// Overwrites the scores (and optional metadata) on any scored match, including those in
     /// completed rounds. Updates PlayerRatingHistory raw scores but does NOT recalculate ELO
     /// (the original ELO delta is kept as-is).

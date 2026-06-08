@@ -408,29 +408,46 @@ else
                                         }
                                         else { <span>—</span> }
                                     </td>
-                                    <td>
+                                    <td colspan="2">
                                         @if (isBye)
                                         {
                                             <span class="text-muted small">auto</span>
                                         }
                                         else if (match.IsScored && !_editingScores.Contains(match.Id))
                                         {
-                                            <span>@match.Player1Score — @match.Player2Score</span>
+                                            @* Show breakdown if available, else totals *@
+                                            @if (match.Player1PrimaryScore.HasValue)
+                                            {
+                                                <div class="small">
+                                                    <span class="fw-semibold">@match.Player1Score — @match.Player2Score</span>
+                                                    <span class="text-muted ms-1">
+                                                        (P: @match.Player1PrimaryScore/@match.Player2PrimaryScore
+                                                         S: @match.Player1SecondaryScore/@match.Player2SecondaryScore
+                                                         BR: @(match.Player1BattleReady ? "✓" : "✗")/@(match.Player2BattleReady ? "✓" : "✗"))
+                                                    </span>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span>@match.Player1Score — @match.Player2Score</span>
+                                            }
                                         }
                                         else if (!isBye)
                                         {
-                                            var inputs = GetScoreInputs(match.Id);
-                                            <div class="d-flex gap-1 align-items-center">
-                                                <input type="number" class="form-control form-control-sm score-input"
-                                                       min="0" placeholder="P1"
-                                                       value="@inputs.p1"
-                                                       @oninput="e => SetScore(match.Id, true, e.Value?.ToString())" />
-                                                <span>—</span>
-                                                <input type="number" class="form-control form-control-sm score-input"
-                                                       min="0" placeholder="P2"
-                                                       value="@inputs.p2"
-                                                       @oninput="e => SetScore(match.Id, false, e.Value?.ToString())" />
-                                            </div>
+                                            @* Get or default breakdown state for this match *@
+                                            @if (_scoreInputs.TryGetValue(match.Id, out var si) || true)
+                                            {
+                                            <ScoreEntryForm
+                                                Player1Label="@(match.Player1?.Name ?? "P1")"
+                                                Player2Label="@(match.Player2?.Name ?? "P2")"
+                                                ScoringSystem="@(_tournament!.ScoringSystem)"
+                                                P1Primary="@si.p1pri" P1PrimaryChanged="v => SetScoreField(match.Id, 0, v)"
+                                                P1Secondary="@si.p1sec" P1SecondaryChanged="v => SetScoreField(match.Id, 1, v)"
+                                                P1BattleReady="@si.p1br" P1BattleReadyChanged="v => SetScoreField(match.Id, 2, v)"
+                                                P2Primary="@si.p2pri" P2PrimaryChanged="v => SetScoreField(match.Id, 3, v)"
+                                                P2Secondary="@si.p2sec" P2SecondaryChanged="v => SetScoreField(match.Id, 4, v)"
+                                                P2BattleReady="@si.p2br" P2BattleReadyChanged="v => SetScoreField(match.Id, 5, v)" />
+                                            }
                                         }
                                     </td>
                                     <td>
@@ -633,8 +650,21 @@ else
     private List<Player> _players = [];
     private List<Round> _rounds = [];
     private Dictionary<Guid, List<Match>> _matchesByRound = [];
-    // Transient score-input state: matchId → (p1 input, p2 input)
-    private Dictionary<Guid, (int? p1, int? p2)> _scoreInputs = [];
+    // Transient score-input state: matchId → (p1Primary, p1Secondary, p1BR, p2Primary, p2Secondary, p2BR)
+    private Dictionary<Guid, (int? p1pri, int? p1sec, bool p1br, int? p2pri, int? p2sec, bool p2br)> _scoreInputs = [];
+
+    // Legacy accessor shape kept for display; actual entry now uses breakdown
+    private (int? p1, int? p2) GetScoreInputs(Guid matchId)
+    {
+        if (!_scoreInputs.TryGetValue(matchId, out var v)) return (null, null);
+        var t1 = v.p1pri.HasValue && v.p1sec.HasValue
+            ? Xenopairings.Services.Rounds.ScoreCalculator.ComputeTotal(v.p1pri.Value, v.p1sec.Value, v.p1br)
+            : (int?)null;
+        var t2 = v.p2pri.HasValue && v.p2sec.HasValue
+            ? Xenopairings.Services.Rounds.ScoreCalculator.ComputeTotal(v.p2pri.Value, v.p2sec.Value, v.p2br)
+            : (int?)null;
+        return (t1, t2);
+    }
     // First-turn and attacker pending selections before the score is saved
     private Dictionary<Guid, bool?> _firstTurnInputs = [];
     private Dictionary<Guid, bool?> _attackerInputs = [];
@@ -906,23 +936,36 @@ else
         }
     }
 
-    private (int? p1, int? p2) GetScoreInputs(Guid matchId)
+    // field: 0=p1pri 1=p1sec 2=p1br(bool) 3=p2pri 4=p2sec 5=p2br(bool)
+    private void SetScoreField(Guid matchId, int field, object? value)
     {
-        _scoreInputs.TryGetValue(matchId, out var v);
-        return v;
+        _scoreInputs.TryGetValue(matchId, out var cur);
+        if (cur == default) cur = (null, null, true, null, null, true);
+        _scoreInputs[matchId] = field switch
+        {
+            0 => (value as int?, cur.p1sec, cur.p1br, cur.p2pri, cur.p2sec, cur.p2br),
+            1 => (cur.p1pri, value as int?, cur.p1br, cur.p2pri, cur.p2sec, cur.p2br),
+            2 => (cur.p1pri, cur.p1sec, value is bool b1 && b1, cur.p2pri, cur.p2sec, cur.p2br),
+            3 => (cur.p1pri, cur.p1sec, cur.p1br, value as int?, cur.p2sec, cur.p2br),
+            4 => (cur.p1pri, cur.p1sec, cur.p1br, cur.p2pri, value as int?, cur.p2br),
+            5 => (cur.p1pri, cur.p1sec, cur.p1br, cur.p2pri, cur.p2sec, value is bool b2 && b2),
+            _ => cur,
+        };
     }
 
     private void SetScore(Guid matchId, bool isP1, string? raw)
     {
-        _scoreInputs.TryGetValue(matchId, out var current);
+        // Legacy helper — not called now that ScoreEntryForm is used
         var parsed = int.TryParse(raw, out var n) ? (int?)n : null;
-        _scoreInputs[matchId] = isP1 ? (parsed, current.p2) : (current.p1, parsed);
+        SetScoreField(matchId, isP1 ? 0 : 3, parsed);
     }
 
     private void StartEditScore(Guid matchId, int? p1, int? p2)
     {
         _editingScores.Add(matchId);
-        _scoreInputs[matchId] = (p1, p2);
+        // Pre-populate with existing totals — breakdown will be entered via the form
+        // (p1/p2 are the old totals; we initialise breakdown as null so user fills them in)
+        _scoreInputs[matchId] = (null, null, true, null, null, true);
     }
 
     private void CancelEditScore(Guid matchId)
@@ -934,7 +977,8 @@ else
     private async Task SaveEditedScore(Guid matchId)
     {
         if (!_scoreInputs.TryGetValue(matchId, out var inputs)) return;
-        if (inputs.p1 is null || inputs.p2 is null) return;
+        var totals = GetScoreInputs(matchId);
+        if (totals.p1 is null || totals.p2 is null) return;
 
         _firstTurnInputs.TryGetValue(matchId, out var p1WentFirst);
         _attackerInputs.TryGetValue(matchId, out var p1IsAttacker);
@@ -943,10 +987,23 @@ else
         _errorMessage = null;
         try
         {
-            await RoundService.UpdateScoreAsync(
-                matchId, inputs.p1.Value, inputs.p2.Value,
-                player1IsAttacker: p1IsAttacker,
-                player1WentFirst: p1WentFirst);
+            if (inputs.p1pri.HasValue && inputs.p1sec.HasValue &&
+                inputs.p2pri.HasValue && inputs.p2sec.HasValue)
+            {
+                await RoundService.EnterScoreBreakdownAsync(
+                    matchId,
+                    inputs.p1pri.Value, inputs.p1sec.Value, inputs.p1br,
+                    inputs.p2pri.Value, inputs.p2sec.Value, inputs.p2br,
+                    player1IsAttacker: p1IsAttacker,
+                    player1WentFirst:  p1WentFirst);
+            }
+            else
+            {
+                await RoundService.UpdateScoreAsync(
+                    matchId, totals.p1.Value, totals.p2.Value,
+                    player1IsAttacker: p1IsAttacker,
+                    player1WentFirst:  p1WentFirst);
+            }
             _editingScores.Remove(matchId);
             _scoreInputs.Remove(matchId);
             _firstTurnInputs.Remove(matchId);
@@ -975,7 +1032,8 @@ else
     private async Task SaveScore(Guid matchId)
     {
         if (!_scoreInputs.TryGetValue(matchId, out var inputs)) return;
-        if (inputs.p1 is null || inputs.p2 is null) return;
+        if (inputs.p1pri is null || inputs.p1sec is null ||
+            inputs.p2pri is null || inputs.p2sec is null) return;
 
         _firstTurnInputs.TryGetValue(matchId, out var p1WentFirst);
         _attackerInputs.TryGetValue(matchId, out var p1IsAttacker);
@@ -984,10 +1042,12 @@ else
         _errorMessage = null;
         try
         {
-            await RoundService.EnterScoresAsync(
-                matchId, inputs.p1.Value, inputs.p2.Value,
+            await RoundService.EnterScoreBreakdownAsync(
+                matchId,
+                inputs.p1pri.Value, inputs.p1sec.Value, inputs.p1br,
+                inputs.p2pri.Value, inputs.p2sec.Value, inputs.p2br,
                 player1IsAttacker: p1IsAttacker,
-                player1WentFirst: p1WentFirst);
+                player1WentFirst:  p1WentFirst);
             _scoreInputs.Remove(matchId);
             _firstTurnInputs.Remove(matchId);
             _attackerInputs.Remove(matchId);

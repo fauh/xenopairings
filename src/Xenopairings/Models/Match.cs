@@ -26,4 +26,15 @@ public class Match
     public int? Player1SportsRating { get; set; }
     /// <summary>1–5 sportsmanship rating given by Player 2 for this game. Null = not yet rated.</summary>
     public int? Player2SportsRating { get; set; }
+
+    // ── Score breakdown ───────────────────────────────────────────────────────
+    /// <summary>Primary objective score (0–45). Null when not yet entered or tournament uses single-total entry.</summary>
+    public int? Player1PrimaryScore { get; set; }
+    public int? Player1SecondaryScore { get; set; }
+    /// <summary>Battle Ready painting bonus (+10 if true). Default true (assumed painted).</summary>
+    public bool Player1BattleReady { get; set; } = true;
+
+    public int? Player2PrimaryScore { get; set; }
+    public int? Player2SecondaryScore { get; set; }
+    public bool Player2BattleReady { get; set; } = true;
 }

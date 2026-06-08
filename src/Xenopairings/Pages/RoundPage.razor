@@ -71,27 +71,26 @@ else
     @if (_myMatch is not null && !_myMatch.IsScored && _myMatch.Player2Id is not null)
     {
         var opponent = _myMatch.Player1Id == _myPlayerId ? _myMatch.Player2 : _myMatch.Player1;
-        <div class="card mb-4 border-primary" style="max-width:480px">
+        var isP1 = _myMatch.Player1Id == _myPlayerId;
+        <div class="card mb-4 border-primary" style="max-width:560px">
             <div class="card-header bg-primary text-white">
                 Submit your result — Table @_myMatch.TableNumber
             </div>
             <div class="card-body">
                 <p class="text-muted small mb-3">vs <strong>@(opponent?.Name ?? "opponent")</strong></p>
 
-                <div class="row g-2 mb-3">
-                    <div class="col">
-                        <label class="form-label small">Your score</label>
-                        <input type="number" class="form-control" min="0"
-                               @bind="_myScore" placeholder="0" />
-                    </div>
-                    <div class="col">
-                        <label class="form-label small">Opponent score</label>
-                        <input type="number" class="form-control" min="0"
-                               @bind="_oppScore" placeholder="0" />
-                    </div>
-                </div>
+                <ScoreEntryForm
+                    Player1Label="@(isP1 ? "You" : (opponent?.Name ?? "Opponent"))"
+                    Player2Label="@(isP1 ? (opponent?.Name ?? "Opponent") : "You")"
+                    ScoringSystem="@(_tournament?.ScoringSystem ?? ScoringSystem.Gw)"
+                    P1Primary="@_myP1Primary" P1PrimaryChanged="v => _myP1Primary = v"
+                    P1Secondary="@_myP1Secondary" P1SecondaryChanged="v => _myP1Secondary = v"
+                    P1BattleReady="@_myP1BattleReady" P1BattleReadyChanged="v => _myP1BattleReady = v"
+                    P2Primary="@_myP2Primary" P2PrimaryChanged="v => _myP2Primary = v"
+                    P2Secondary="@_myP2Secondary" P2SecondaryChanged="v => _myP2Secondary = v"
+                    P2BattleReady="@_myP2BattleReady" P2BattleReadyChanged="v => _myP2BattleReady = v" />
 
-                <div class="row g-3 mb-3">
+                <div class="row g-3 mt-2 mb-3">
                     <div class="col-sm-6">
                         <label class="form-label small">First turn</label>
                         <div class="form-check">
@@ -135,7 +134,8 @@ else
 
                 <button class="btn btn-primary"
                         @onclick="SubmitResult"
-                        disabled="@(_myScore is null || _oppScore is null
+                        disabled="@(_myP1Primary is null || _myP1Secondary is null
+                                    || _myP2Primary is null || _myP2Secondary is null
                                     || _iWentFirst is null || _iWasAttacker is null || _busy)">
                     Submit result
                 </button>
@@ -239,9 +239,13 @@ else
     private Guid? _myPlayerId;
     private Match? _myMatch;
 
-    // Submission state
-    private int? _myScore;
-    private int? _oppScore;
+    // Submission state — breakdown scoring
+    private int?  _myP1Primary    = null;
+    private int?  _myP1Secondary  = null;
+    private bool  _myP1BattleReady = true;
+    private int?  _myP2Primary    = null;
+    private int?  _myP2Secondary  = null;
+    private bool  _myP2BattleReady = true;
     private bool? _iWentFirst;
     private bool? _iWasAttacker;
     private bool _busy;
@@ -266,7 +270,8 @@ else
     {
         _loading = true;
         // Reset submission state when switching rounds
-        _myScore = _oppScore = null;
+        _myP1Primary = _myP1Secondary = _myP2Primary = _myP2Secondary = null;
+        _myP1BattleReady = _myP2BattleReady = true;
         _iWentFirst = _iWasAttacker = null;
         _submitError = null;
         _submitSuccess = false;
@@ -319,16 +324,33 @@ else
     private async Task SubmitResult()
     {
         if (_myMatch is null || _myPlayerId is null) return;
-        if (_myScore is null || _oppScore is null || _iWentFirst is null || _iWasAttacker is null) return;
+        if (_myP1Primary is null || _myP1Secondary is null ||
+            _myP2Primary is null || _myP2Secondary is null ||
+            _iWentFirst is null || _iWasAttacker is null) return;
+
+        // The form shows P1 = "me" when isP1, so we need to determine orientation
+        var isP1 = _myMatch.Player1Id == _myPlayerId;
+        int p1Pri = isP1 ? _myP1Primary.Value : _myP2Primary.Value;
+        int p1Sec = isP1 ? _myP1Secondary.Value : _myP2Secondary.Value;
+        bool p1Br = isP1 ? _myP1BattleReady : _myP2BattleReady;
+        int p2Pri = isP1 ? _myP2Primary.Value : _myP1Primary.Value;
+        int p2Sec = isP1 ? _myP2Secondary.Value : _myP1Secondary.Value;
+        bool p2Br = isP1 ? _myP2BattleReady : _myP1BattleReady;
+
+        // p1IsAttacker and p1WentFirst are from the submitting player's perspective
+        bool p1IsAttacker = isP1 ? _iWasAttacker.Value : !_iWasAttacker.Value;
+        bool p1WentFirst  = isP1 ? _iWentFirst.Value  : !_iWentFirst.Value;
 
         _busy = true;
         _submitError = null;
         try
         {
-            await RoundService.SubmitMatchResultAsync(
-                _myMatch.Id, _myPlayerId.Value,
-                _myScore.Value, _oppScore.Value,
-                _iWentFirst.Value, _iWasAttacker.Value);
+            await RoundService.EnterScoreBreakdownAsync(
+                _myMatch.Id,
+                p1Pri, p1Sec, p1Br,
+                p2Pri, p2Sec, p2Br,
+                player1IsAttacker: p1IsAttacker,
+                player1WentFirst:  p1WentFirst);
             _matches = [.. await RoundService.GetMatchesAsync(_round!.Id)];
             _myMatch = _matches.FirstOrDefault(m =>
                 m.Player1Id == _myPlayerId || m.Player2Id == _myPlayerId);

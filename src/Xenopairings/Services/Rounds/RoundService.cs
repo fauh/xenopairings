@@ -524,6 +524,42 @@ public sealed class RoundService(
 
     // ── Score entry ───────────────────────────────────────────────────────────
 
+    public async Task EnterScoreBreakdownAsync(
+        Guid matchId,
+        int p1Primary, int p1Secondary, bool p1BattleReady,
+        int p2Primary, int p2Secondary, bool p2BattleReady,
+        bool? player1IsAttacker = null,
+        bool? player1WentFirst = null)
+    {
+        if (!ScoreCalculator.IsValid(p1Primary, p1Secondary) ||
+            !ScoreCalculator.IsValid(p2Primary, p2Secondary))
+            throw new ArgumentException("Primary and secondary scores must each be 0–45.");
+
+        var match = await db.Matches.FindAsync(matchId)
+            ?? throw new InvalidOperationException($"Match {matchId} not found.");
+
+        if (match.Player2Id is null)
+            throw new InvalidOperationException("Cannot enter scores for a bye match.");
+
+        match.Player1PrimaryScore   = p1Primary;
+        match.Player1SecondaryScore = p1Secondary;
+        match.Player1BattleReady    = p1BattleReady;
+        match.Player2PrimaryScore   = p2Primary;
+        match.Player2SecondaryScore = p2Secondary;
+        match.Player2BattleReady    = p2BattleReady;
+
+        // Compute totals for standings / ELO
+        match.Player1Score = ScoreCalculator.ComputeTotal(p1Primary, p1Secondary, p1BattleReady);
+        match.Player2Score = ScoreCalculator.ComputeTotal(p2Primary, p2Secondary, p2BattleReady);
+
+        if (player1IsAttacker.HasValue) match.Player1IsAttacker = player1IsAttacker;
+        if (player1WentFirst.HasValue)  match.Player1WentFirst  = player1WentFirst;
+        match.IsScored = true;
+
+        await db.SaveChangesAsync();
+        // ELO is processed at tournament-end only.
+    }
+
     public async Task SetSportsRatingAsync(Guid matchId, Guid submittingPlayerId, int rating)
     {
         if (rating < 1 || rating > 5)

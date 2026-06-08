@@ -1,0 +1,123 @@
+@* Reusable score-entry form: Primary + Secondary + Battle Ready for each player.
+   Shows WTC GP conversion when ScoringSystem == Wtc. *@
+@using Xenopairings.Models
+@using Xenopairings.Services.Pairings
+@using Xenopairings.Services.Rounds
+
+<div class="score-entry-form">
+
+    @* ── Score rows ── *@
+    <div class="row g-2 mb-2">
+        <div class="col">
+            <div class="score-entry-header small fw-semibold text-muted mb-1">@Player1Label</div>
+            <div class="mb-1">
+                <label class="form-label small mb-0">Primary <span class="text-muted">(0–45)</span></label>
+                <input type="number" class="form-control form-control-sm"
+                       min="0" max="45" placeholder="0"
+                       value="@P1Primary"
+                       @oninput="e => P1PrimaryChanged.InvokeAsync(TryParseNullable(e.Value?.ToString()))"
+                       disabled="@Disabled" />
+            </div>
+            <div class="mb-1">
+                <label class="form-label small mb-0">Secondary <span class="text-muted">(0–45)</span></label>
+                <input type="number" class="form-control form-control-sm"
+                       min="0" max="45" placeholder="0"
+                       value="@P1Secondary"
+                       @oninput="e => P1SecondaryChanged.InvokeAsync(TryParseNullable(e.Value?.ToString()))"
+                       disabled="@Disabled" />
+            </div>
+            <div class="form-check mt-1">
+                <input class="form-check-input" type="checkbox" id="p1br-@_id"
+                       checked="@P1BattleReady"
+                       @onchange="e => P1BattleReadyChanged.InvokeAsync((bool)(e.Value ?? true))"
+                       disabled="@Disabled" />
+                <label class="form-check-label small" for="p1br-@_id">
+                    Battle Ready <span class="text-muted">(+10)</span>
+                </label>
+            </div>
+            @if (P1Primary.HasValue && P1Secondary.HasValue)
+            {
+                var total = ScoreCalculator.ComputeTotal(P1Primary.Value, P1Secondary.Value, P1BattleReady);
+                <div class="mt-1 small fw-semibold">Total: @total</div>
+            }
+        </div>
+
+        <div class="col-auto d-flex align-items-center">
+            <span class="text-muted fw-bold">—</span>
+        </div>
+
+        <div class="col">
+            <div class="score-entry-header small fw-semibold text-muted mb-1">@Player2Label</div>
+            <div class="mb-1">
+                <label class="form-label small mb-0">Primary <span class="text-muted">(0–45)</span></label>
+                <input type="number" class="form-control form-control-sm"
+                       min="0" max="45" placeholder="0"
+                       value="@P2Primary"
+                       @oninput="e => P2PrimaryChanged.InvokeAsync(TryParseNullable(e.Value?.ToString()))"
+                       disabled="@Disabled" />
+            </div>
+            <div class="mb-1">
+                <label class="form-label small mb-0">Secondary <span class="text-muted">(0–45)</span></label>
+                <input type="number" class="form-control form-control-sm"
+                       min="0" max="45" placeholder="0"
+                       value="@P2Secondary"
+                       @oninput="e => P2SecondaryChanged.InvokeAsync(TryParseNullable(e.Value?.ToString()))"
+                       disabled="@Disabled" />
+            </div>
+            <div class="form-check mt-1">
+                <input class="form-check-input" type="checkbox" id="p2br-@_id"
+                       checked="@P2BattleReady"
+                       @onchange="e => P2BattleReadyChanged.InvokeAsync((bool)(e.Value ?? true))"
+                       disabled="@Disabled" />
+                <label class="form-check-label small" for="p2br-@_id">
+                    Battle Ready <span class="text-muted">(+10)</span>
+                </label>
+            </div>
+            @if (P2Primary.HasValue && P2Secondary.HasValue)
+            {
+                var total = ScoreCalculator.ComputeTotal(P2Primary.Value, P2Secondary.Value, P2BattleReady);
+                <div class="mt-1 small fw-semibold">Total: @total</div>
+            }
+        </div>
+    </div>
+
+    @* ── WTC GP preview ── *@
+    @if (ScoringSystem == ScoringSystem.Wtc && P1Primary.HasValue && P1Secondary.HasValue && P2Primary.HasValue && P2Secondary.HasValue)
+    {
+        var t1 = ScoreCalculator.ComputeTotal(P1Primary.Value, P1Secondary.Value, P1BattleReady);
+        var t2 = ScoreCalculator.ComputeTotal(P2Primary.Value, P2Secondary.Value, P2BattleReady);
+        var (gp1, gp2) = WtcScoring.ConvertToGamePoints(t1, t2);
+        <div class="alert alert-secondary py-2 small mt-2">
+            <strong>WTC game points:</strong>
+            <span class="ms-2">@Player1Label <strong>@gp1</strong> — @Player2Label <strong>@gp2</strong></span>
+            <span class="text-muted ms-2">(from totals @t1 — @t2)</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Player1Label { get; set; } = "Player 1";
+    [Parameter] public string Player2Label { get; set; } = "Player 2";
+    [Parameter] public ScoringSystem ScoringSystem { get; set; } = ScoringSystem.Gw;
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public int?  P1Primary        { get; set; }
+    [Parameter] public int?  P1Secondary      { get; set; }
+    [Parameter] public bool  P1BattleReady    { get; set; } = true;
+    [Parameter] public int?  P2Primary        { get; set; }
+    [Parameter] public int?  P2Secondary      { get; set; }
+    [Parameter] public bool  P2BattleReady    { get; set; } = true;
+
+    [Parameter] public EventCallback<int?>  P1PrimaryChanged     { get; set; }
+    [Parameter] public EventCallback<int?>  P1SecondaryChanged   { get; set; }
+    [Parameter] public EventCallback<bool>  P1BattleReadyChanged { get; set; }
+    [Parameter] public EventCallback<int?>  P2PrimaryChanged     { get; set; }
+    [Parameter] public EventCallback<int?>  P2SecondaryChanged   { get; set; }
+    [Parameter] public EventCallback<bool>  P2BattleReadyChanged { get; set; }
+
+    // Unique id suffix so checkbox ids don't collide when multiple forms are on the same page
+    private readonly string _id = Guid.NewGuid().ToString("N")[..8];
+
+    private static int? TryParseNullable(string? s) =>
+        int.TryParse(s, out var n) ? n : null;
+}

@@ -2,7 +2,7 @@
 
 A Warhammer 40K tournament management app. Create events, pair rounds using Swiss pairings, track scores and standings, and follow player ELO ratings across seasons.
 
-**Live at:** [xenopairings.com](https://xenopairings.com) *(update with actual URL)*
+**Live at:** [xenopairings-production.up.railway.app](https://xenopairings-production.up.railway.app)
 
 ---
 
